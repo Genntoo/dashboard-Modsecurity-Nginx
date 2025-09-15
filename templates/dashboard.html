@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>ModSecurity Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            --primary-blue: #1e3a8a;
+            --secondary-blue: #3b82f6;
+            --light-blue: #60a5fa;
+            --dark-blue: #1e40af;
+            --accent-blue: #2563eb;
+        }
+
+        body {
+            background-color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+        }
+
+        .navbar {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--dark-blue) 100%) !important;
+            box-shadow: 0 4px 12px rgba(30, 58, 138, 0.3);
+        }
+
+        .navbar-brand {
+            font-weight: 600;
+            font-size: 1.3rem;
+        }
+
+        .main-header {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--secondary-blue) 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(30, 58, 138, 0.2);
+        }
+
+        .main-header h1 {
+            font-weight: 700;
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .main-header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .action-buttons .btn {
+            border-radius: 8px;
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .btn-outline-light:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255, 255, 255, 0.3);
+        }
+
+        .explanation-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            border: none;
+            margin-bottom: 2rem;
+        }
+
+        .explanation-card .card-header {
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            border-bottom: 1px solid #e2e8f0;
+            border-radius: 12px 12px 0 0 !important;
+            padding: 1.5rem;
+        }
+
+        .explanation-card h5 {
+            color: var(--primary-blue);
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .metric-card {
+            border-radius: 12px;
+            border: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(135deg, var(--light-blue) 0%, var(--accent-blue) 100%);
+        }
+
+        .metric-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        }
+
+        .metric-card.success::before {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+
+        .metric-card.warning::before {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        }
+
+        .metric-card.danger::before {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        }
+
+        .metric-card .card-body {
+            padding: 1.5rem;
+            background: white;
+        }
+
+        .metric-card h5 {
+            color: #64748b;
+            font-weight: 500;
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-card h2 {
+            color: var(--primary-blue);
+            font-weight: 700;
+            font-size: 2.5rem;
+            margin: 0;
+        }
+
+        .chart-card {
+            background: white;
+            border-radius: 12px;
+            border: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            margin-bottom: 2rem;
+            overflow: hidden;
+        }
+
+        .chart-card .card-header {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--secondary-blue) 100%);
+            color: white;
+            font-weight: 600;
+            border: none;
+            padding: 1rem 1.5rem;
+        }
+
+        .chart-container {
+            position: relative;
+            margin: auto;
+            height: 300px;
+            margin-bottom: 20px;
+            padding: 1rem;
+        }
+
+        .events-table-card {
+            background: white;
+            border-radius: 12px;
+            border: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .events-table-card .card-header {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--secondary-blue) 100%);
+            color: white;
+            font-weight: 600;
+            border: none;
+            padding: 1rem 1.5rem;
+        }
+
+        .table {
+            margin: 0;
+            font-size: 0.9rem;
+        }
+
+        .table th {
+            background-color: #f8fafc;
+            color: var(--primary-blue);
+            font-weight: 600;
+            border-bottom: 2px solid #e2e8f0;
+            padding: 1rem 0.75rem;
+        }
+
+        .table td {
+            padding: 0.75rem;
+            vertical-align: middle;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .table tbody tr {
+            transition: background-color 0.2s ease;
+        }
+
+        .table tbody tr:hover {
+            background-color: #f8fafc;
+        }
+
+        .badge {
+            font-size: 0.75rem;
+            padding: 0.35rem 0.65rem;
+            border-radius: 6px;
+        }
+
+        .text-decoration-none {
+            text-decoration: none !important;
+        }
+
+        .text-decoration-none:hover {
+            text-decoration: none !important;
+        }
+
+        table {
+            width: 100%;
+            table-layout: fixed;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+
+        th, td {
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-shield-check"></i> ModSecurity Dashboard
+            </a>
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/rules">Manage Rules</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/exclusions">Exclusiones</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <!-- Main Header -->
+        <div class="main-header no-print">
+            <div class="container-fluid">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h1><i class="bi bi-shield-exclamation"></i> ModSecurity Dashboard</h1>
+                        <p class="mb-0">Monitor and analyze your web application firewall activity in real-time</p>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="action-buttons text-end">
+                            <a href="/export/csv" class="btn btn-outline-light me-2">
+                                <i class="bi bi-download"></i> Export CSV
+                            </a>
+                            <a href="/export/pdf" class="btn btn-outline-light me-2">
+                                <i class="bi bi-file-pdf"></i> Export PDF
+                            </a>
+                            <form action="/reset-logs" method="post" class="d-inline">
+                                <button type="submit" class="btn btn-outline-light"
+                                    onclick="return confirm('Are you sure you want to reset the report?')">
+                                    <i class="bi bi-arrow-clockwise"></i> Reset Report
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Description Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card explanation-card">
+                    <div class="card-header">
+                        <h5><i class="bi bi-info-circle"></i> Dashboard Explanation</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-borderless">
+                            <thead>
+                                <tr>
+                                    <th style="width: 20%;">Category</th>
+                                    <th style="width: 25%;">Label & Color</th>
+                                    <th style="width: 20%;">Status Codes</th>
+                                    <th style="width: 35%;">Explanation</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><strong>Normal Traffic</strong></td>
+                                    <td><span class="badge bg-success">✅ Normal Traffic</span></td>
+                                    <td>200–399, 401, 404, etc.</td>
+                                    <td>Legitimate requests that were not blocked by the WAF, including successful responses and common client errors like 401 Unauthorized or 404 Not Found.</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Rule Violations</strong></td>
+                                    <td><span class="badge bg-warning text-dark">⚠️ Suspicious</span></td>
+                                    <td>Usually 406, 414, etc.</td>
+                                    <td>Requests flagged as suspicious or malformed input—potential probing or attempted attacks. These may be logged or monitored without blocking, depending on rule configuration.</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Blocked Requests</strong></td>
+                                    <td><span class="badge bg-danger">⛔ Blocked</span></td>
+                                    <td>403</td>
+                                    <td>Explicitly malicious requests identified and blocked by ModSecurity, typically resulting in a 403 Forbidden response.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Metrics Cards -->
+        <div class="row">
+            <div class="col-md-4">
+                <a href="/logs/normal" class="text-decoration-none">
+                    <div class="card metric-card success mb-4">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Normal Traffic</h5>
+                            <h2 class="card-text">{{ normal_traffic }}</h2>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            <div class="col-md-4">
+                <a href="/logs/blocked" class="text-decoration-none">
+                    <div class="card metric-card warning mb-4">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Rule Violations</h5>
+                            <h2 class="card-text">{{ blocked_requests }}</h2>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            <div class="col-md-4">
+                <a href="/logs/attack" class="text-decoration-none">
+                    <div class="card metric-card danger mb-4">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Attack Attempts</h5>
+                            <h2 class="card-text">{{ attack_attempts }}</h2>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <i class="bi bi-bar-chart"></i> Request Status Code Distribution
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="statusChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <i class="bi bi-pie-chart"></i> Request Type Distribution
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="donutChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <i class="bi bi-graph-up"></i> Requests by Hour of Day
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="hourlyChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Events Table -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card events-table-card">
+                    <div class="card-header">
+                        <i class="bi bi-clock-history"></i> Recent Security Events
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 15%;">Time</th>
+                                        <th style="width: 7%;">ID</th>
+                                        <th style="width: 8%;">IP</th>
+                                        <th style="width: 7%;">Port</th>
+                                        <th style="width: 5%;">Method</th>
+                                        <th style="width: 28%;">Path</th>
+                                        <th style="width: 10%;">Status</th>
+                                        <th style="width: 20%;">Rule Triggered</th>
+                                        <th style="width: 20%;">Rule Match</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for entry in recent_logs %}
+                                    <tr>
+                                        <td>{{ entry.timestamp }}</td>
+                                        <td>{{ entry.id }}</td>
+                                        <td>{{ entry.ip_address }}</td>
+                                        <td>{{ entry.port }}</td>
+                                        <td>{{ entry.method }}</td>
+                                        <td style="word-wrap: break-word;">{{ entry.path }}</td>
+                                        <td>{{ entry.status }}</td>
+                                        <td>
+                                            {% if entry.rule_messages %}
+                                            {% for rule in entry.rule_messages %}
+                                            <div><strong>{{ rule.rule_id }}</strong>: {{ rule.rule_msg }}</div>
+                                            {% endfor %}
+                                            {% else %}
+                                            <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if entry.rule_messages %}
+                                            {% for rule in entry.rule_messages %}
+                                            <div><strong>{{ rule.rule_id }}</strong>: {{ rule.rule_data }}</div>
+                                            {% endfor %}
+                                            {% else %}
+                                            <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Color mapping based on your existing scheme
+        function getStatusColor(status) {
+            const statusCode = parseInt(status);
+            if (statusCode === 403) return 'rgba(239, 68, 68, 0.7)'; // Attack Attempts (red)
+            if ([406, 414].includes(statusCode)) return 'rgba(245, 158, 11, 0.7)'; // Rule Violations (yellow)
+            if (statusCode >= 200 && statusCode < 400) return 'rgba(16, 185, 129, 0.7)'; // Normal Traffic (green)
+            if ([401, 404].includes(statusCode)) return 'rgba(59, 130, 246, 0.7)'; // Other normal (blue)
+            return 'rgba(108, 117, 125, 0.7)'; // Default (gray)
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            try {
+                // Get the raw data from hidden elements
+                const statusData = JSON.parse(document.getElementById('chart-status-data').textContent);
+                const hourlyData = JSON.parse(document.getElementById('chart-hourly-data').textContent);
+                const metricsData = JSON.parse(document.getElementById('chart-metrics-data').textContent);
+
+                // Debugging: Check if data is loaded correctly
+                console.log('Status Data:', statusData);
+                console.log('Hourly Data:', hourlyData);
+                console.log('Metrics Data:', metricsData);
+
+                // 1. Status Code Distribution Chart
+                const statusCtx = document.getElementById('statusChart');
+                if (statusCtx) {
+                    new Chart(statusCtx.getContext('2d'), {
+                        type: 'bar',
+                        data: {
+                            labels: statusData.map(item => item.status.toString()),
+                            datasets: [{
+                                label: '', // Empty label to prevent legend item
+                                data: statusData.map(item => item.count),
+                                backgroundColor: statusData.map(item => getStatusColor(item.status)),
+                                borderColor: statusData.map(item => getStatusColor(item.status).replace('0.7', '1')),
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    display: false // Completely hide the legend
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        title: function (context) {
+                                            return `Status ${context[0].label}`;
+                                        },
+                                        label: function (context) {
+                                            return `${context.parsed.y} requests`;
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    title: { display: true, text: 'Number of Requests' }
+                                },
+                                x: {
+                                    title: { display: true, text: 'Status Code' }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // 2. Hourly Distribution Chart
+                const hourlyCtx = document.getElementById('hourlyChart');
+                if (hourlyCtx) {
+                    new Chart(hourlyCtx.getContext('2d'), {
+                        type: 'line',
+                        data: {
+                            labels: hourlyData.map(item => item.hour.toString()),
+                            datasets: [{
+                                label: 'Requests',
+                                data: hourlyData.map(item => item.count),
+                                backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                                borderColor: 'rgba(59, 130, 246, 1)',
+                                borderWidth: 2,
+                                tension: 0.1,
+                                fill: true
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: { beginAtZero: true, title: { display: true, text: 'Number of Requests' } },
+                                x: { title: { display: true, text: 'Hour of Day' } }
+                            }
+                        }
+                    });
+                }
+
+                // 3. Donut Chart - Request Type Distribution
+                const donutCtx = document.getElementById('donutChart');
+                if (donutCtx) {
+                    new Chart(donutCtx.getContext('2d'), {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Normal Traffic', 'Rule Violations', 'Attack Attempts'],
+                            datasets: [{
+                                data: [
+                                    metricsData.normal_traffic,
+                                    metricsData.blocked_requests,
+                                    metricsData.attack_attempts
+                                ],
+                                backgroundColor: [
+                                    'rgba(16, 185, 129, 0.7)',
+                                    'rgba(245, 158, 11, 0.7)',
+                                    'rgba(239, 68, 68, 0.7)'
+                                ],
+                                borderColor: [
+                                    'rgba(16, 185, 129, 1)',
+                                    'rgba(245, 158, 11, 1)',
+                                    'rgba(239, 68, 68, 1)'
+                                ],
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'right' },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function (context) {
+                                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                            const value = context.raw;
+                                            const percentage = Math.round((value / total) * 100);
+                                            return `${context.label}: ${value} (${percentage}%)`;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+
+            } catch (error) {
+                console.error('Error initializing charts:', error);
+            }
+        });
+    </script>
+
+    <!-- Data Storage Elements -->
+    <script type="application/json" id="chart-status-data">{{ status_data|tojson|safe }}</script>
+    <script type="application/json" id="chart-hourly-data">{{ hourly_data|tojson|safe }}</script>
+    <script type="application/json" id="chart-metrics-data">
+    {
+        "normal_traffic": {{ normal_traffic|default(0) }},
+        "blocked_requests": {{ blocked_requests|default(0) }},
+        "attack_attempts": {{ attack_attempts|default(0) }}
+    }
+    </script>
+</body>
+
+</html>

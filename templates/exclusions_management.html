@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Exclusiones - ModSecurity</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        .exclusion-card {
+            transition: all 0.3s ease;
+            border-left: 4px solid transparent;
+        }
+        .exclusion-card.enabled {
+            border-left-color: #28a745;
+        }
+        .exclusion-card.disabled {
+            border-left-color: #dc3545;
+            opacity: 0.7;
+        }
+        .condition-badge {
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+        }
+        .exclusion-type-badge {
+            font-size: 0.75rem;
+        }
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1055;
+        }
+        .code-snippet {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 0.5rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+        .template-card {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .template-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .stats-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-shield-exclamation"></i> ModSecurity Dashboard
+            </a>
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/rules">Gestión de Reglas</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/exclusions">Exclusiones</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <!-- Header con estadísticas -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card stats-card text-white">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <h3 class="card-title mb-2">
+                                    <i class="bi bi-shield-slash"></i> Gestión de Exclusiones
+                                </h3>
+                                <p class="mb-0">Crea y gestiona exclusiones para resolver falsos positivos sin deshabilitar reglas completamente</p>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="row text-center">
+                                    <div class="col-3">
+                                        <div class="fs-4" id="totalExclusions">--</div>
+                                        <small>Total</small>
+                                    </div>
+                                    <div class="col-3">
+                                        <div class="fs-4 text-success" id="enabledExclusions">--</div>
+                                        <small>Activas</small>
+                                    </div>
+                                    <div class="col-3">
+                                        <div class="fs-4 text-danger" id="disabledExclusions">--</div>
+                                        <small>Inactivas</small>
+                                    </div>
+                                    <div class="col-3">
+                                        <div class="fs-4 text-warning" id="recentExclusions">--</div>
+                                        <small>Recientes</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pestañas principales -->
+        <ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="exclusions-tab" data-bs-toggle="tab" data-bs-target="#exclusions-panel" type="button" role="tab">
+                    <i class="bi bi-list-ul"></i> Exclusiones Activas
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="create-tab" data-bs-toggle="tab" data-bs-target="#create-panel" type="button" role="tab">
+                    <i class="bi bi-plus-circle"></i> Crear Exclusión
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="templates-tab" data-bs-toggle="tab" data-bs-target="#templates-panel" type="button" role="tab">
+                    <i class="bi bi-files"></i> Plantillas
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="mainTabContent">
+            <!-- Panel de Exclusiones -->
+            <div class="tab-pane fade show active" id="exclusions-panel" role="tabpanel">
+                <div class="row mb-3">
+                    <div class="col-md-8">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control" id="searchExclusions" placeholder="Buscar exclusiones...">
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <select class="form-select" id="filterStatus">
+                            <option value="">Todos</option>
+                            <option value="enabled">Activas</option>
+                            <option value="disabled">Inactivas</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-outline-primary w-100" id="refreshExclusions">
+                            <i class="bi bi-arrow-clockwise"></i> Actualizar
+                        </button>
+                    </div>
+                </div>
+
+                <div id="exclusionsContainer">
+                    <div class="text-center py-5">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Cargando...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel de Creación -->
+            <div class="tab-pane fade" id="create-panel" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-8 mx-auto">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="bi bi-plus-circle"></i> Nueva Exclusión</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="exclusionForm">
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Nombre <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="exclusionName" required>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Fase de ModSecurity</label>
+                                            <select class="form-select" id="exclusionPhase">
+                                                <option value="1">Fase 1 (Request Headers)</option>
+                                                <option value="2" selected>Fase 2 (Request Body)</option>
+                                                <option value="3">Fase 3 (Response Headers)</option>
+                                                <option value="4">Fase 4 (Response Body)</option>
+                                                <option value="5">Fase 5 (Logging)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Descripción</label>
+                                        <textarea class="form-control" id="exclusionDescription" rows="2" 
+                                                  placeholder="Descripción opcional de la exclusión"></textarea>
+                                    </div>
+
+                                    <h6 class="border-bottom pb-2 mb-3">Condición de Activación</h6>
+                                    
+                                    <div class="row mb-3">
+                                        <div class="col-md-4">
+                                            <label class="form-label">Variable <span class="text-danger">*</span></label>
+                                            <select class="form-select" id="conditionVariable" required>
+                                                <option value="">Seleccionar...</option>
+                                                <option value="REQUEST_URI">REQUEST_URI</option>
+                                                <option value="REQUEST_FILENAME">REQUEST_FILENAME</option>
+                                                <option value="REMOTE_ADDR">REMOTE_ADDR</option>
+                                                <option value="REQUEST_HEADERS:Host">Host Header</option>
+                                                <option value="REQUEST_HEADERS:User-Agent">User-Agent</option>
+                                                <option value="REQUEST_METHOD">REQUEST_METHOD</option>
+                                                <option value="ARGS">ARGS</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Operador <span class="text-danger">*</span></label>
+                                            <select class="form-select" id="conditionOperator" required>
+                                                <option value="">Seleccionar...</option>
+                                                <option value="@beginsWith">Comienza con</option>
+                                                <option value="@endsWith">Termina con</option>
+                                                <option value="@contains">Contiene</option>
+                                                <option value="@eq">Igual a</option>
+                                                <option value="@ipMatch">IP Match</option>
+                                                <option value="@rx">Expresión Regular</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Valor <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="conditionValue" required
+                                                   placeholder="ej: /api/, 192.168.1.0/24">
+                                        </div>
+                                    </div>
+
+                                    <h6 class="border-bottom pb-2 mb-3">Tipo de Exclusión</h6>
+                                    
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Tipo <span class="text-danger">*</span></label>
+                                            <select class="form-select" id="exclusionType" required>
+                                                <option value="">Seleccionar...</option>
+                                                <option value="ruleRemoveById">Eliminar Regla por ID</option>
+                                                <option value="ruleRemoveByTag">Eliminar Reglas por Tag</option>
+                                                <option value="ruleRemoveTargetById">Eliminar Target por ID</option>
+                                                <option value="ruleRemoveTargetByTag">Eliminar Target por Tag</option>
+                                                <option value="ruleEngine=Off">Deshabilitar WAF Completamente</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label" id="exclusionValueLabel">Valor</label>
+                                            <input type="text" class="form-control" id="exclusionValue"
+                                                   placeholder="ej: 942100, attack-sqli">
+                                        </div>
+                                    </div>
+
+                                    <div class="row mb-3" id="targetRow" style="display:none;">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Target (Opcional)</label>
+                                            <input type="text" class="form-control" id="exclusionTarget"
+                                                   placeholder="ej: ARGS:parameter_name">
+                                            <small class="form-text text-muted">Solo para exclusiones de target específicos</small>
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-4" id="previewContainer" style="display:none;">
+                                        <label class="form-label">Vista Previa de la Regla</label>
+                                        <div class="code-snippet" id="rulePreview"></div>
+                                    </div>
+
+                                    <div class="d-flex gap-2">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="bi bi-save"></i> Crear Exclusión
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary" id="clearForm">
+                                            <i class="bi bi-x-circle"></i> Limpiar
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel de Plantillas -->
+            <div class="tab-pane fade" id="templates-panel" role="tabpanel">
+                <div class="row" id="templatesContainer">
+                    <div class="text-center py-5">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Cargando plantillas...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Edición -->
+    <div class="modal fade" id="editExclusionModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Editar Exclusión</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editForm">
+                        <input type="hidden" id="editExclusionId">
+                        <div class="mb-3">
+                            <label class="form-label">Nombre</label>
+                            <input type="text" class="form-control" id="editName">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Descripción</label>
+                            <textarea class="form-control" id="editDescription" rows="3"></textarea>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="editEnabled">
+                            <label class="form-check-label" for="editEnabled">
+                                Exclusión activa
+                            </label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="saveEdit">Guardar Cambios</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Confirmación -->
+    <div class="modal fade" id="confirmModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirmar Acción</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="confirmMessage"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-danger" id="confirmAction">Confirmar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        class ExclusionsManager {
+            constructor() {
+                this.exclusions = [];
+                this.templates = [];
+                this.currentExclusionId = null;
+                
+                this.initEventListeners();
+                this.loadExclusions();
+                this.loadTemplates();
+                this.loadStatistics();
+            }
+
+            initEventListeners() {
+                // Formulario de creación
+                document.getElementById('exclusionForm').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.createExclusion();
+                });
+
+                // Actualización en tiempo real de la vista previa
+                ['conditionVariable', 'conditionOperator', 'conditionValue', 'exclusionType', 'exclusionValue', 'exclusionTarget'].forEach(id => {
+                    document.getElementById(id).addEventListener('change', () => this.updatePreview());
+                    document.getElementById(id).addEventListener('input', () => this.updatePreview());
+                });
+
+                // Tipo de exclusión change
+                document.getElementById('exclusionType').addEventListener('change', (e) => {
+                    this.handleExclusionTypeChange(e.target.value);
+                });
+
+                // Botones
+                document.getElementById('clearForm').addEventListener('click', () => this.clearForm());
+                document.getElementById('refreshExclusions').addEventListener('click', () => this.loadExclusions());
+                document.getElementById('saveEdit').addEventListener('click', () => this.saveEdit());
+
+                // Filtros
+                document.getElementById('searchExclusions').addEventListener('input', () => this.filterExclusions());
+                document.getElementById('filterStatus').addEventListener('change', () => this.filterExclusions());
+            }
+
+            async loadExclusions() {
+                try {
+                    const response = await fetch('/api/exclusions');
+                    if (!response.ok) throw new Error('Error al cargar exclusiones');
+                    
+                    this.exclusions = await response.json();
+                    this.renderExclusions();
+                    this.loadStatistics();
+                } catch (error) {
+                    console.error('Error:', error);
+                    this.showToast('Error al cargar las exclusiones', 'danger');
+                }
+            }
+
+            async loadTemplates() {
+                try {
+                    const response = await fetch('/api/exclusions/templates/common');
+                    if (!response.ok) throw new Error('Error al cargar plantillas');
+                    
+                    const data = await response.json();
+                    this.templates = data.templates;
+                    this.renderTemplates();
+                } catch (error) {
+                    console.error('Error:', error);
+                    this.showToast('Error al cargar las plantillas', 'warning');
+                }
+            }
+
+            async loadStatistics() {
+                try {
+                    const response = await fetch('/api/exclusions/statistics');
+                    if (!response.ok) throw new Error('Error al cargar estadísticas');
+                    
+                    const stats = await response.json();
+                    document.getElementById('totalExclusions').textContent = stats.total;
+                    document.getElementById('enabledExclusions').textContent = stats.enabled;
+                    document.getElementById('disabledExclusions').textContent = stats.disabled;
+                    document.getElementById('recentExclusions').textContent = stats.recent;
+                } catch (error) {
+                    console.error('Error loading statistics:', error);
+                }
+            }
+
+            renderExclusions() {
+                const container = document.getElementById('exclusionsContainer');
+                
+                if (this.exclusions.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-5">
+                            <i class="bi bi-inbox fs-1 text-muted"></i>
+                            <h5 class="text-muted mt-3">No hay exclusiones creadas</h5>
+                            <p class="text-muted">Crea tu primera exclusión usando la pestaña "Crear Exclusión"</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = this.exclusions.map(exclusion => this.createExclusionCard(exclusion)).join('');
+            }
+
+            createExclusionCard(exclusion) {
+                const statusClass = exclusion.enabled ? 'enabled' : 'disabled';
+                const statusIcon = exclusion.enabled ? 'check-circle-fill text-success' : 'x-circle-fill text-danger';
+                const typeLabel = this.getTypeLabel(exclusion.exclusion_type);
+                const conditionText = `${exclusion.condition_variable} ${exclusion.operator} "${exclusion.condition_value}"`;
+
+                return `
+                    <div class="card exclusion-card ${statusClass} mb-3">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col-md-6">
+                                    <div class="d-flex align-items-start">
+                                        <i class="bi bi-${statusIcon} me-2 mt-1"></i>
+                                        <div>
+                                            <h6 class="mb-1">${exclusion.name}</h6>
+                                            <p class="text-muted mb-2 small">${exclusion.description || 'Sin descripción'}</p>
+                                            <div class="mb-1">
+                                                <span class="badge condition-badge bg-light text-dark">${conditionText}</span>
+                                            </div>
+                                            <span class="badge exclusion-type-badge ${this.getTypeBadgeClass(exclusion.exclusion_type)}">
+                                                ${typeLabel}: ${exclusion.exclusion_value}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <small class="text-muted">
+                                        <div><strong>Fase:</strong> ${exclusion.phase}</div>
+                                        <div><strong>Creada:</strong> ${new Date(exclusion.created_at).toLocaleDateString()}</div>
+                                        ${exclusion.target ? `<div><strong>Target:</strong> ${exclusion.target}</div>` : ''}
+                                    </small>
+                                </div>
+                                <div class="col-md-3 text-end">
+                                    <div class="btn-group" role="group">
+                                        <button class="btn btn-sm btn-outline-primary" onclick="exclusionsManager.editExclusion('${exclusion.id}')" title="Editar">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-warning" onclick="exclusionsManager.toggleExclusion('${exclusion.id}')" title="${exclusion.enabled ? 'Deshabilitar' : 'Habilitar'}">
+                                            <i class="bi bi-${exclusion.enabled ? 'pause' : 'play'}"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger" onclick="exclusionsManager.deleteExclusion('${exclusion.id}')" title="Eliminar">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            renderTemplates() {
+                const container = document.getElementById('templatesContainer');
+                
+                container.innerHTML = this.templates.map(template => `
+                    <div class="col-md-6 mb-4">
+                        <div class="card template-card h-100" onclick="exclusionsManager.useTemplate(${JSON.stringify(template).replace(/"/g, '&quot;')})">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="bi bi-file-earmark-code"></i> ${template.name}
+                                </h6>
+                                <p class="card-text text-muted small">${template.description}</p>
+                                <div class="code-snippet small">
+                                    ${this.generatePreviewText(template.template)}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            useTemplate(template) {
+                // Cambiar a la pestaña de creación
+                document.getElementById('create-tab').click();
+                
+                // Llenar el formulario con los datos de la plantilla
+                document.getElementById('exclusionName').value = template.name;
+                document.getElementById('exclusionDescription').value = template.description;
+                document.getElementById('conditionVariable').value = template.template.condition_variable;
+                document.getElementById('conditionOperator').value = template.template.operator;
+                document.getElementById('conditionValue').value = template.template.condition_value;
+                document.getElementById('exclusionType').value = template.template.exclusion_type;
+                document.getElementById('exclusionValue').value = template.template.exclusion_value;
+                document.getElementById('exclusionPhase').value = template.template.phase;
+                
+                if (template.template.target) {
+                    document.getElementById('exclusionTarget').value = template.template.target;
+                }
+
+                this.handleExclusionTypeChange(template.template.exclusion_type);
+                this.updatePreview();
+                
+                this.showToast('Plantilla cargada en el formulario', 'success');
+            }
+
+            handleExclusionTypeChange(type) {
+                const targetRow = document.getElementById('targetRow');
+                const valueLabel = document.getElementById('exclusionValueLabel');
+                const valueInput = document.getElementById('exclusionValue');
+
+                if (type.includes('Target')) {
+                    targetRow.style.display = 'block';
+                } else {
+                    targetRow.style.display = 'none';
+                }
+
+                switch (type) {
+                    case 'ruleRemoveById':
+                        valueLabel.textContent = 'Rule ID';
+                        valueInput.placeholder = 'ej: 942100';
+                        break;
+                    case 'ruleRemoveByTag':
+                        valueLabel.textContent = 'Tag';
+                        valueInput.placeholder = 'ej: attack-sqli';
+                        break;
+                    case 'ruleRemoveTargetById':
+                        valueLabel.textContent = 'Rule ID';
+                        valueInput.placeholder = 'ej: 942100';
+                        break;
+                    case 'ruleRemoveTargetByTag':
+                        valueLabel.textContent = 'Tag';
+                        valueInput.placeholder = 'ej: attack-sqli';
+                        break;
+                    case 'ruleEngine=Off':
+                        valueLabel.textContent = 'N/A';
+                        valueInput.placeholder = '';
+                        valueInput.value = '';
+                        break;
+                }
+
+                this.updatePreview();
+            }
+
+            updatePreview() {
+                const data = this.getFormData();
+                if (this.isFormValid(data)) {
+                    const preview = this.generatePreviewText(data);
+                    document.getElementById('rulePreview').textContent = preview;
+                    document.getElementById('previewContainer').style.display = 'block';
+                } else {
+                    document.getElementById('previewContainer').style.display = 'none';
+                }
+            }
+
+            generatePreviewText(data) {
+                const condition = `${data.condition_variable} "${data.operator} ${data.condition_value}"`;
+                
+                let exclusionAction;
+                if (data.exclusion_type === 'ruleEngine=Off') {
+                    exclusionAction = 'ctl:ruleEngine=Off';
+                } else if (data.exclusion_type.includes('Target') && data.target) {
+                    exclusionAction = `ctl:${data.exclusion_type}=${data.exclusion_value};${data.target}`;
+                } else {
+                    exclusionAction = `ctl:${data.exclusion_type}=${data.exclusion_value}`;
+                }
+
+                return `SecRule ${condition} \\
+    "id:90000XXX,\\
+    phase:${data.phase || 2},\\
+    pass,\\
+    nolog,\\
+    ${exclusionAction}"`;
+            }
+
+            getFormData() {
+                return {
+                    name: document.getElementById('exclusionName').value,
+                    description: document.getElementById('exclusionDescription').value,
+                    condition_variable: document.getElementById('conditionVariable').value,
+                    operator: document.getElementById('conditionOperator').value,
+                    condition_value: document.getElementById('conditionValue').value,
+                    exclusion_type: document.getElementById('exclusionType').value,
+                    exclusion_value: document.getElementById('exclusionValue').value,
+                    target: document.getElementById('exclusionTarget').value,
+                    phase: parseInt(document.getElementById('exclusionPhase').value)
+                };
+            }
+
+            isFormValid(data) {
+                return data.name && data.condition_variable && data.operator && 
+                       data.condition_value && data.exclusion_type && 
+                       (data.exclusion_type === 'ruleEngine=Off' || data.exclusion_value);
+            }
+
+            async createExclusion() {
+                const data = this.getFormData();
+                
+                if (!this.isFormValid(data)) {
+                    this.showToast('Por favor completa todos los campos requeridos', 'warning');
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/exclusions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+
+                    if (!response.ok) throw new Error('Error al crear la exclusión');
+
+                    this.showToast('Exclusión creada correctamente', 'success');
+                    this.clearForm();
+                    this.loadExclusions();
+                    
+                    // Cambiar a la pestaña de exclusiones
+                    document.getElementById('exclusions-tab').click();
+                } catch (error) {
+                    console.error('Error:', error);
+                    this.showToast('Error al crear la exclusión', 'danger');
+                }
+            }
+
+            clearForm() {
+                document.getElementById('exclusionForm').reset();
+                document.getElementById('previewContainer').style.display = 'none';
+                document.getElementById('targetRow').style.display = 'none';
+            }
+
+            editExclusion(id) {
+                const exclusion = this.exclusions.find(ex => ex.id === id);
+                if (!exclusion) return;
+
+                this.currentExclusionId = id;
+                document.getElementById('editExclusionId').value = id;
+                document.getElementById('editName').value = exclusion.name;
+                document.getElementById('editDescription').value = exclusion.description || '';
+                document.getElementById('editEnabled').checked = exclusion.enabled;
+
+                new bootstrap.Modal(document.getElementById('editExclusionModal')).show();
+            }
+
+            async saveEdit() {
+                const id = this.currentExclusionId;
+                const data = {
+                    name: document.getElementById('editName').value,
+                    description: document.getElementById('editDescription').value,
+                    enabled: document.getElementById('editEnabled').checked
+                };
+
+                try {
+                    const response = await fetch(`/api/exclusions/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+
+                    if (!response.ok) throw new Error('Error al actualizar la exclusión');
+
+                    this.showToast('Exclusión actualizada correctamente', 'success');
+                    bootstrap.Modal.getInstance(document.getElementById('editExclusionModal')).hide();
+                    this.loadExclusions();
+                } catch (error) {
+                    console.error('Error:', error);
+                    this.showToast('Error al actualizar la exclusión', 'danger');
+                }
+            }
+
+            async toggleExclusion(id) {
+                try {
+                    const response = await fetch(`/api/exclusions/${id}/toggle`, {
+                        method: 'POST'
+                    });
+
+                    if (!response.ok) throw new Error('Error al cambiar el estado');
+
+                    const result = await response.json();
+                    this.showToast(result.message, 'success');
+                    this.loadExclusions();
+                } catch (error) {
+                    console.error('Error:', error);
+                    this.showToast('Error al cambiar el estado de la exclusión', 'danger');
+                }
+            }
+
+            deleteExclusion(id) {
+                const exclusion = this.exclusions.find(ex => ex.id === id);
+                if (!exclusion) return;
+
+                document.getElementById('confirmMessage').textContent = 
+                    `¿Estás seguro de que quieres eliminar la exclusión "${exclusion.name}"?`;
+                
+                document.getElementById('confirmAction').onclick = async () => {
+                    try {
+                        const response = await fetch(`/api/exclusions/${id}`, {
+                            method: 'DELETE'
+                        });
+
+                        if (!response.ok) throw new Error('Error al eliminar la exclusión');
+
+                        this.showToast('Exclusión eliminada correctamente', 'success');
+                        bootstrap.Modal.getInstance(document.getElementById('confirmModal')).hide();
+                        this.loadExclusions();
+                    } catch (error) {
+                        console.error('Error:', error);
+                        this.showToast('Error al eliminar la exclusión', 'danger');
+                    }
+                };
+
+                new bootstrap.Modal(document.getElementById('confirmModal')).show();
+            }
+
+            filterExclusions() {
+                const search = document.getElementById('searchExclusions').value.toLowerCase();
+                const status = document.getElementById('filterStatus').value;
+
+                let filtered = this.exclusions;
+
+                if (search) {
+                    filtered = filtered.filter(ex => 
+                        ex.name.toLowerCase().includes(search) ||
+                        ex.description?.toLowerCase().includes(search) ||
+                        ex.condition_value.toLowerCase().includes(search) ||
+                        ex.exclusion_value.toLowerCase().includes(search)
+                    );
+                }
+
+                if (status) {
+                    const isEnabled = status === 'enabled';
+                    filtered = filtered.filter(ex => ex.enabled === isEnabled);
+                }
+
+                // Re-renderizar con las exclusiones filtradas
+                const container = document.getElementById('exclusionsContainer');
+                if (filtered.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-5">
+                            <i class="bi bi-search fs-1 text-muted"></i>
+                            <h5 class="text-muted mt-3">No se encontraron exclusiones</h5>
+                            <p class="text-muted">Intenta con diferentes términos de búsqueda</p>
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = filtered.map(exclusion => this.createExclusionCard(exclusion)).join('');
+                }
+            }
+
+            // Utility methods
+            getTypeLabel(type) {
+                const labels = {
+                    'ruleRemoveById': 'Remove by ID',
+                    'ruleRemoveByTag': 'Remove by Tag',
+                    'ruleRemoveTargetById': 'Remove Target by ID',
+                    'ruleRemoveTargetByTag': 'Remove Target by Tag',
+                    'ruleEngine=Off': 'Disable Engine'
+                };
+                return labels[type] || type;
+            }
+
+            getTypeBadgeClass(type) {
+                if (type === 'ruleEngine=Off') return 'bg-danger';
+                if (type.includes('Target')) return 'bg-warning';
+                return 'bg-info';
+            }
+
+            showToast(message, type = 'info') {
+                const toastContainer = document.getElementById('toastContainer');
+                const toastId = 'toast_' + Date.now();
+                
+                const toast = document.createElement('div');
+                toast.className = `toast align-items-center text-bg-${type} border-0`;
+                toast.id = toastId;
+                toast.setAttribute('role', 'alert');
+                toast.innerHTML = `
+                    <div class="d-flex">
+                        <div class="toast-body">${message}</div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                    </div>
+                `;
+                
+                toastContainer.appendChild(toast);
+                const bsToast = new bootstrap.Toast(toast);
+                bsToast.show();
+                
+                toast.addEventListener('hidden.bs.toast', () => {
+                    toast.remove();
+                });
+            }
+        }
+
+        // Inicializar cuando se carga la página
+        let exclusionsManager;
+        document.addEventListener('DOMContentLoaded', () => {
+            exclusionsManager = new ExclusionsManager();
+        });
+    </script>
+</body>
+</html>

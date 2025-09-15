@@ -1,0 +1,1489 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>ModSecurity Rule Management</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <style>
+        :root {
+            --primary-blue: #1e3a8a;
+            --secondary-blue: #3b82f6;
+            --light-blue: #60a5fa;
+            --dark-blue: #1e40af;
+            --accent-blue: #2563eb;
+        }
+
+        body {
+            background-color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .navbar {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--dark-blue) 100%) !important;
+            box-shadow: 0 4px 12px rgba(30, 58, 138, 0.3);
+        }
+
+        .navbar-brand {
+            font-weight: 600;
+            font-size: 1.3rem;
+        }
+
+        .stats-card {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--secondary-blue) 100%);
+            color: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 8px 24px rgba(30, 58, 138, 0.2);
+        }
+
+        .main-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            border: none;
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+
+        .main-card .card-header {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--secondary-blue) 100%);
+            color: white;
+            font-weight: 600;
+            border: none;
+            padding: 1.25rem 1.5rem;
+        }
+
+        .main-card .card-header h5 {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+
+        .main-card .card-body {
+            padding: 2rem;
+        }
+
+        .custom-rule-card {
+            transition: all 0.3s ease;
+            border-left: 4px solid transparent;
+            margin-bottom: 1rem;
+        }
+
+        .custom-rule-card.enabled {
+            border-left-color: #28a745;
+        }
+
+        .custom-rule-card.disabled {
+            border-left-color: #dc3545;
+            opacity: 0.7;
+        }
+
+        .code-snippet {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 1rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .template-card {
+            cursor: pointer;
+            transition: all 0.2s ease;
+            height: 100%;
+        }
+
+        .template-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .form-label {
+            color: var(--primary-blue);
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-control, .form-select {
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 0.75rem;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--secondary-blue) 0%, var(--accent-blue) 100%);
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            padding: 0.75rem 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, var(--accent-blue) 0%, var(--primary-blue) 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+
+        .nav-tabs {
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .nav-tabs .nav-link {
+            color: var(--primary-blue);
+            font-weight: 600;
+            border: none;
+            border-bottom: 3px solid transparent;
+            padding: 0.75rem 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .nav-tabs .nav-link:hover {
+            color: var(--accent-blue);
+            border-bottom-color: var(--light-blue);
+        }
+
+        .nav-tabs .nav-link.active {
+            color: var(--dark-blue);
+            background-color: white;
+            border-bottom-color: var(--accent-blue);
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 1.5rem;
+            font-weight: 700;
+            display: block;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            opacity: 0.9;
+        }
+
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1055;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+        }
+
+        .table-responsive {
+            border-radius: 12px;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        .table thead th {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--secondary-blue) 100%);
+            color: white;
+            font-weight: 600;
+            border: none;
+            padding: 1rem 0.75rem;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .badge {
+            font-size: 0.75rem;
+            padding: 0.35rem 0.65rem;
+            border-radius: 6px;
+            font-weight: 500;
+        }
+
+        .search-container {
+            position: relative;
+        }
+
+        .search-container .form-control {
+            padding-left: 2.5rem;
+        }
+
+        .search-container .bi-search {
+            position: absolute;
+            left: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #64748b;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .control-buttons {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-shield-check"></i> ModSecurity Dashboard
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/rules">Manage Rules</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/exclusions">Exclusions</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <!-- Header with statistics -->
+        <div class="stats-card">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h3 class="mb-2">
+                        <i class="bi bi-shield-check"></i> ModSecurity Rule Management
+                    </h3>
+                    <p class="mb-0">Manage core rules and create custom security rules for your application</p>
+                </div>
+                <div class="col-md-4">
+                    <div class="row text-center">
+                        <div class="col-3">
+                            <div class="stat-item">
+                                <span class="stat-number" id="totalRules">--</span>
+                                <span class="stat-label">Total Rules</span>
+                            </div>
+                        </div>
+                        <div class="col-3">
+                            <div class="stat-item">
+                                <span class="stat-number" id="activeRules">--</span>
+                                <span class="stat-label">Active</span>
+                            </div>
+                        </div>
+                        <div class="col-3">
+                            <div class="stat-item">
+                                <span class="stat-number" id="blockedRules">--</span>
+                                <span class="stat-label">Blocking</span>
+                            </div>
+                        </div>
+                        <div class="col-3">
+                            <div class="stat-item">
+                                <span class="stat-number" id="customRulesCount">--</span>
+                                <span class="stat-label">Custom</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main tabs -->
+        <ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="core-rules-tab" data-bs-toggle="tab" 
+                        data-bs-target="#core-rules-panel" type="button" role="tab">
+                    <i class="bi bi-list-ul"></i> Core Rules
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="custom-rules-tab" data-bs-toggle="tab" 
+                        data-bs-target="#custom-rules-panel" type="button" role="tab">
+                    <i class="bi bi-code-slash"></i> Custom Rules
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="create-rule-tab" data-bs-toggle="tab" 
+                        data-bs-target="#create-rule-panel" type="button" role="tab">
+                    <i class="bi bi-plus-circle"></i> Create Rule
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="templates-tab" data-bs-toggle="tab" 
+                        data-bs-target="#templates-panel" type="button" role="tab">
+                    <i class="bi bi-files"></i> Templates
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="mainTabContent">
+            <!-- Core Rules Panel -->
+            <div class="tab-pane fade show active" id="core-rules-panel" role="tabpanel">
+                <div class="main-card">
+                    <div class="card-header">
+                        <h5><i class="bi bi-gear"></i> Core ModSecurity Rules</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Control Buttons -->
+                        <div class="control-buttons">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="search-container">
+                                        <input type="text" id="ruleSearch" class="form-control" 
+                                               placeholder="Search rules..." />
+                                        <i class="bi bi-search"></i>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <select id="categoryFilter" class="form-select">
+                                        <option value="">All Categories</option>
+                                        <option value="XSS">XSS</option>
+                                        <option value="SQLi">SQL Injection</option>
+                                        <option value="Generic">Generic Attack</option>
+                                        <option value="Protocol">Protocol Attack</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <button id="applyChanges" class="btn btn-primary w-100">
+                                        <i class="bi bi-check-circle"></i> Apply Changes
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pagination (Top) -->
+                        <nav aria-label="Rules pagination top" class="mb-3">
+                            <ul class="pagination justify-content-center" id="paginationTop"></ul>
+                        </nav>
+
+                        <div class="table-container">
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 10%;">Rule ID</th>
+                                            <th style="width: 35%;">Description</th>
+                                            <th style="width: 15%;">Category</th>
+                                            <th style="width: 10%;">Severity</th>
+                                            <th style="width: 15%;">Current Action</th>
+                                            <th style="width: 15%;">Change To</th>
+                                        </tr>
+                                        <tr>
+                                            <th><input type="text" class="form-control column-filter" 
+                                                       data-column="rule_id" placeholder="Filter..."></th>
+                                            <th><input type="text" class="form-control column-filter" 
+                                                       data-column="description" placeholder="Filter..."></th>
+                                            <th><input type="text" class="form-control column-filter" 
+                                                       data-column="category" placeholder="Filter..."></th>
+                                            <th><input type="text" class="form-control column-filter" 
+                                                       data-column="severity" placeholder="Filter..."></th>
+                                            <th><input type="text" class="form-control column-filter" 
+                                                       data-column="current_action" placeholder="Filter..."></th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="rulesTable">
+                                        <tr>
+                                            <td colspan="6" class="text-center py-5">
+                                                <div class="spinner-border text-primary" role="status">
+                                                    <span class="visually-hidden">Loading rules...</span>
+                                                </div>
+                                                <div class="mt-2 text-muted">Loading rules...</div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Pagination (Bottom) -->
+                        <nav aria-label="Rules pagination bottom" class="mt-3">
+                            <ul class="pagination justify-content-center" id="paginationBottom"></ul>
+                        </nav>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Custom Rules Panel -->
+            <div class="tab-pane fade" id="custom-rules-panel" role="tabpanel">
+                <div class="row mb-3">
+                    <div class="col-md-10">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control" id="searchCustomRules" 
+                                   placeholder="Search custom rules...">
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-outline-primary w-100" id="refreshCustomRules">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <div id="customRulesContainer">
+                    <div class="text-center py-5">
+                        <i class="bi bi-code-slash fs-1 text-muted"></i>
+                        <h5 class="text-muted mt-3">No custom rules yet</h5>
+                        <p class="text-muted">Create your first custom rule using the "Create Rule" tab</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Create Rule Panel -->
+            <div class="tab-pane fade" id="create-rule-panel" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-10 mx-auto">
+                        <div class="card">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0"><i class="bi bi-magic"></i> Custom Rule Builder</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="newRuleForm">
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <label for="ruleName" class="form-label">Rule Name <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="ruleName" required
+                                                   placeholder="e.g., Block malicious user agents">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="ruleId" class="form-label">Rule ID <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="ruleId" required
+                                                   placeholder="e.g., 900001" pattern="[0-9]+">
+                                            <small class="text-muted">Use IDs between 900000-999999 for custom rules</small>
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="ruleDescription" class="form-label">Description</label>
+                                        <textarea class="form-control" id="ruleDescription" rows="2"
+                                                  placeholder="Optional description of what this rule does"></textarea>
+                                    </div>
+
+                                    <div class="row g-3 mb-3">
+                                        <div class="col-md-4">
+                                            <label for="ruleType" class="form-label">Rule Type <span class="text-danger">*</span></label>
+                                            <select class="form-select" id="ruleType" required>
+                                                <option value="">Select type...</option>
+                                                <option value="request_header">Request Header</option>
+                                                <option value="request_uri">Request URI</option>
+                                                <option value="request_method">Request Method</option>
+                                                <option value="request_body">Request Body</option>
+                                                <option value="ip_address">IP Address</option>
+                                                <option value="user_agent">User Agent</option>
+                                                <option value="custom">Custom (Advanced)</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="col-md-4">
+                                            <label for="ruleOperator" class="form-label">Operator <span class="text-danger">*</span></label>
+                                            <select class="form-select" id="ruleOperator" required>
+                                                <option value="">Select operator...</option>
+                                                <option value="@contains">Contains</option>
+                                                <option value="@beginsWith">Begins With</option>
+                                                <option value="@endsWith">Ends With</option>
+                                                <option value="@eq">Equals</option>
+                                                <option value="@rx">Regex Match</option>
+                                                <option value="@ipMatch">IP Match</option>
+                                                <option value="@detectSQLi">Detect SQL Injection</option>
+                                                <option value="@detectXSS">Detect XSS</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="col-md-4">
+                                            <label for="rulePattern" class="form-label">Pattern/Value <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="rulePattern" required
+                                                   placeholder="e.g., malicious-bot|evil-crawler">
+                                        </div>
+                                    </div>
+
+                                    <div class="row g-3 mb-3">
+                                        <div class="col-md-4">
+                                            <label for="rulePhase" class="form-label">Phase</label>
+                                            <select class="form-select" id="rulePhase">
+                                                <option value="1">Phase 1 (Request Headers)</option>
+                                                <option value="2" selected>Phase 2 (Request Body)</option>
+                                                <option value="3">Phase 3 (Response Headers)</option>
+                                                <option value="4">Phase 4 (Response Body)</option>
+                                                <option value="5">Phase 5 (Logging)</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="col-md-4">
+                                            <label for="ruleSeverity" class="form-label">Severity</label>
+                                            <select class="form-select" id="ruleSeverity">
+                                                <option value="CRITICAL" selected>Critical</option>
+                                                <option value="ERROR">Error</option>
+                                                <option value="WARNING">Warning</option>
+                                                <option value="NOTICE">Notice</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="col-md-4">
+                                            <label for="ruleAction" class="form-label">Action</label>
+                                            <select class="form-select" id="ruleAction">
+                                                <option value="block" selected>Block</option>
+                                                <option value="deny">Deny</option>
+                                                <option value="pass">Pass (Log Only)</option>
+                                                <option value="redirect">Redirect</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3" id="customRuleContainer" style="display: none;">
+                                        <label for="customRuleText" class="form-label">Custom Rule Text</label>
+                                        <textarea class="form-control font-monospace" id="customRuleText" rows="4"
+                                                  placeholder="Enter complete SecRule syntax..."></textarea>
+                                    </div>
+
+                                    <div class="mb-4" id="rulePreviewContainer" style="display: none;">
+                                        <label class="form-label">Rule Preview</label>
+                                        <div class="code-snippet" id="rulePreview"></div>
+                                    </div>
+
+                                    <div class="d-flex gap-2">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="bi bi-magic"></i> Generate Rule
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary" id="clearRuleForm">
+                                            <i class="bi bi-x-circle"></i> Clear
+                                        </button>
+                                    </div>
+                                </form>
+
+                                <div class="mt-4" id="generatedRuleContainer" style="display: none;">
+                                    <div class="alert alert-info">
+                                        <h6><i class="bi bi-file-earmark-code"></i> Generated Rule:</h6>
+                                        <pre id="generatedRuleText" class="code-snippet mt-2"></pre>
+                                        <button id="saveRuleBtn" class="btn btn-success mt-3">
+                                            <i class="bi bi-save"></i> Save Custom Rule
+                                        </button>
+                                        <button id="copyRuleBtn" class="btn btn-outline-primary mt-3 ms-2">
+                                            <i class="bi bi-clipboard"></i> Copy to Clipboard
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Templates Panel -->
+            <div class="tab-pane fade" id="templates-panel" role="tabpanel">
+                <div class="row" id="templatesContainer">
+                    <!-- Template 1: Block Malicious User Agents -->
+                    <div class="col-md-6 mb-4">
+                        <div class="card template-card">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="bi bi-robot"></i> Block Malicious User Agents
+                                </h6>
+                                <p class="card-text text-muted small">
+                                    Block known malicious bots and crawlers
+                                </p>
+                                <div class="code-snippet small">
+SecRule REQUEST_HEADERS:User-Agent "@rx (bot|crawler|spider|scraper)" \
+    "id:900001,\
+    phase:1,\
+    block,\
+    msg:'Malicious bot detected',\
+    severity:CRITICAL"
+                                </div>
+                                <button class="btn btn-sm btn-outline-primary mt-2 use-template-btn"
+                                        data-template="user_agent_block">
+                                    <i class="bi bi-download"></i> Use Template
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Template 2: Block SQL Injection -->
+                    <div class="col-md-6 mb-4">
+                        <div class="card template-card">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="bi bi-database-x"></i> SQL Injection Protection
+                                </h6>
+                                <p class="card-text text-muted small">
+                                    Detect and block SQL injection attempts
+                                </p>
+                                <div class="code-snippet small">
+SecRule ARGS "@detectSQLi" \
+    "id:900002,\
+    phase:2,\
+    block,\
+    msg:'SQL Injection Attack Detected',\
+    severity:CRITICAL"
+                                </div>
+                                <button class="btn btn-sm btn-outline-primary mt-2 use-template-btn"
+                                        data-template="sql_injection">
+                                    <i class="bi bi-download"></i> Use Template
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Template 3: Rate Limiting -->
+                    <div class="col-md-6 mb-4">
+                        <div class="card template-card">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="bi bi-speedometer2"></i> Rate Limiting
+                                </h6>
+                                <p class="card-text text-muted small">
+                                    Limit requests per IP address
+                                </p>
+                                <div class="code-snippet small">
+SecRule REQUEST_URI "@beginsWith /api/" \
+    "id:900003,\
+    phase:1,\
+    pass,\
+    initcol:ip=%{REMOTE_ADDR},\
+    setvar:ip.requests=+1,\
+    expirevar:ip.requests=60"
+                                </div>
+                                <button class="btn btn-sm btn-outline-primary mt-2 use-template-btn"
+                                        data-template="rate_limit">
+                                    <i class="bi bi-download"></i> Use Template
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Template 4: Block IP Range -->
+                    <div class="col-md-6 mb-4">
+                        <div class="card template-card">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="bi bi-geo-alt-fill"></i> Geo-IP Blocking
+                                </h6>
+                                <p class="card-text text-muted small">
+                                    Block specific IP addresses or ranges
+                                </p>
+                                <div class="code-snippet small">
+SecRule REMOTE_ADDR "@ipMatch 10.0.0.0/8,192.168.0.0/16" \
+    "id:900004,\
+    phase:1,\
+    deny,\
+    msg:'Blocked IP range',\
+    severity:WARNING"
+                                </div>
+                                <button class="btn btn-sm btn-outline-primary mt-2 use-template-btn"
+                                        data-template="ip_block">
+                                    <i class="bi bi-download"></i> Use Template
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Template 5: XSS Protection -->
+                    <div class="col-md-6 mb-4">
+                        <div class="card template-card">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="bi bi-code-slash"></i> XSS Protection
+                                </h6>
+                                <p class="card-text text-muted small">
+                                    Detect and block cross-site scripting attempts
+                                </p>
+                                <div class="code-snippet small">
+SecRule ARGS|REQUEST_BODY "@detectXSS" \
+    "id:900005,\
+    phase:2,\
+    block,\
+    msg:'XSS Attack Detected',\
+    severity:CRITICAL"
+                                </div>
+                                <button class="btn btn-sm btn-outline-primary mt-2 use-template-btn"
+                                        data-template="xss_protection">
+                                    <i class="bi bi-download"></i> Use Template
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Template 6: File Upload Protection -->
+                    <div class="col-md-6 mb-4">
+                        <div class="card template-card">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="bi bi-file-earmark-x"></i> File Upload Protection
+                                </h6>
+                                <p class="card-text text-muted small">
+                                    Block dangerous file uploads
+                                </p>
+                                <div class="code-snippet small">
+SecRule FILES_NAMES "@rx \.(exe|bat|cmd|sh|php|pl|py)$" \
+    "id:900006,\
+    phase:2,\
+    block,\
+    msg:'Dangerous file type upload attempt',\
+    severity:ERROR"
+                                </div>
+                                <button class="btn btn-sm btn-outline-primary mt-2 use-template-btn"
+                                        data-template="file_upload">
+                                    <i class="bi bi-download"></i> Use Template
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/rules_management.js"></script>
+    <script>
+        // Additional JavaScript for the new functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize custom rules counter
+            updateCustomRulesCount();
+
+            // Handle rule type changes
+            document.getElementById('ruleType').addEventListener('change', function(e) {
+                const customContainer = document.getElementById('customRuleContainer');
+                const previewContainer = document.getElementById('rulePreviewContainer');
+                
+                if (e.target.value === 'custom') {
+                    customContainer.style.display = 'block';
+                    previewContainer.style.display = 'none';
+                } else {
+                    customContainer.style.display = 'none';
+                    if (e.target.value) {
+                        updateRulePreview();
+                        previewContainer.style.display = 'block';
+                    } else {
+                        previewContainer.style.display = 'none';
+                    }
+                }
+            });
+
+            // Update preview on input changes
+            ['ruleName', 'ruleId', 'ruleOperator', 'rulePattern', 'rulePhase', 'ruleSeverity', 'ruleAction'].forEach(id => {
+                document.getElementById(id).addEventListener('input', updateRulePreview);
+                document.getElementById(id).addEventListener('change', updateRulePreview);
+            });
+
+            // Clear form
+            document.getElementById('clearRuleForm').addEventListener('click', function() {
+                document.getElementById('newRuleForm').reset();
+                document.getElementById('generatedRuleContainer').style.display = 'none';
+                document.getElementById('rulePreviewContainer').style.display = 'none';
+                document.getElementById('customRuleContainer').style.display = 'none';
+            });
+
+            // Handle form submission
+            document.getElementById('newRuleForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                generateRule();
+            });
+
+            // Handle template usage
+            document.querySelectorAll('.use-template-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const template = this.dataset.template;
+                    loadTemplate(template);
+                });
+            });
+
+            // Copy to clipboard
+            document.addEventListener('click', function(e) {
+                if (e.target.id === 'copyRuleBtn') {
+                    const ruleText = document.getElementById('generatedRuleText').textContent;
+                    copyToClipboard(ruleText);
+                    showToast('Rule copied to clipboard!', 'success');
+                }
+            });
+
+            // Refresh custom rules
+            document.getElementById('refreshCustomRules').addEventListener('click', loadCustomRules);
+
+            // Search custom rules
+            document.getElementById('searchCustomRules').addEventListener('input', function(e) {
+                filterCustomRules(e.target.value);
+            });
+        });
+
+        function updateRulePreview() {
+            const ruleType = document.getElementById('ruleType').value;
+            if (!ruleType || ruleType === 'custom') return;
+
+            const ruleId = document.getElementById('ruleId').value || '900XXX';
+            const operator = document.getElementById('ruleOperator').value || '@contains';
+            const pattern = document.getElementById('rulePattern').value || 'pattern';
+            const phase = document.getElementById('rulePhase').value;
+            const severity = document.getElementById('ruleSeverity').value;
+            const action = document.getElementById('ruleAction').value;
+            const ruleName = document.getElementById('ruleName').value || 'Custom Rule';
+
+            let variable = '';
+            switch (ruleType) {
+                case 'request_header': variable = 'REQUEST_HEADERS'; break;
+                case 'request_uri': variable = 'REQUEST_URI'; break;
+                case 'request_method': variable = 'REQUEST_METHOD'; break;
+                case 'request_body': variable = 'REQUEST_BODY'; break;
+                case 'ip_address': variable = 'REMOTE_ADDR'; break;
+                case 'user_agent': variable = 'REQUEST_HEADERS:User-Agent'; break;
+            }
+
+            const rule = `SecRule ${variable} "${operator} ${pattern}" \\
+    "id:${ruleId},\\
+    phase:${phase},\\
+    ${action},\\
+    msg:'${ruleName}',\\
+    severity:${severity}"`;
+
+            document.getElementById('rulePreview').textContent = rule;
+        }
+
+        function generateRule() {
+            const ruleType = document.getElementById('ruleType').value;
+            let generatedRule = '';
+
+            if (ruleType === 'custom') {
+                generatedRule = document.getElementById('customRuleText').value;
+            } else {
+                generatedRule = document.getElementById('rulePreview').textContent;
+            }
+
+            document.getElementById('generatedRuleText').textContent = generatedRule;
+            document.getElementById('generatedRuleContainer').style.display = 'block';
+            window.generatedRule = generatedRule;
+        }
+
+        function loadTemplate(templateName) {
+            // Switch to Create Rule tab
+            document.getElementById('create-rule-tab').click();
+
+            // Fill form based on template
+            const templates = {
+                'user_agent_block': {
+                    name: 'Block Malicious User Agents',
+                    id: '900001',
+                    type: 'user_agent',
+                    operator: '@rx',
+                    pattern: '(bot|crawler|spider|scraper)',
+                    action: 'block',
+                    severity: 'CRITICAL'
+                },
+                'sql_injection': {
+                    name: 'SQL Injection Protection',
+                    id: '900002',
+                    type: 'request_body',
+                    operator: '@detectSQLi',
+                    pattern: '',
+                    action: 'block',
+                    severity: 'CRITICAL'
+                },
+                'xss_protection': {
+                    name: 'XSS Protection',
+                    id: '900005',
+                    type: 'request_body',
+                    operator: '@detectXSS',
+                    pattern: '',
+                    action: 'block',
+                    severity: 'CRITICAL'
+                },
+                'ip_block': {
+                    name: 'Block IP Range',
+                    id: '900004',
+                    type: 'ip_address',
+                    operator: '@ipMatch',
+                    pattern: '10.0.0.0/8,192.168.0.0/16',
+                    action: 'deny',
+                    severity: 'WARNING'
+                }
+            };
+
+            const template = templates[templateName];
+            if (template) {
+                document.getElementById('ruleName').value = template.name;
+                document.getElementById('ruleId').value = template.id;
+                document.getElementById('ruleType').value = template.type;
+                document.getElementById('ruleOperator').value = template.operator;
+                document.getElementById('rulePattern').value = template.pattern;
+                document.getElementById('ruleAction').value = template.action;
+                document.getElementById('ruleSeverity').value = template.severity;
+
+                updateRulePreview();
+                document.getElementById('rulePreviewContainer').style.display = 'block';
+                showToast('Template loaded successfully!', 'success');
+            }
+        }
+
+        function loadCustomRules() {
+            // This would load custom rules from the server
+            // For now, showing placeholder
+            const container = document.getElementById('customRulesContainer');
+            // Implementation would fetch from /api/rules/custom
+            showToast('Custom rules refreshed', 'info');
+        }
+
+        function filterCustomRules(searchTerm) {
+            // Filter custom rules based on search term
+            console.log('Filtering custom rules:', searchTerm);
+        }
+
+        function updateCustomRulesCount() {
+            // This would fetch the actual count from the server
+            document.getElementById('customRulesCount').textContent = '0';
+        }
+
+        function copyToClipboard(text) {
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(text);
+            } else {
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            const toastHtml = `
+                <div class="toast align-items-center text-bg-${type} border-0" role="alert">
+                    <div class="d-flex">
+                        <div class="toast-body">${message}</div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                    </div>
+                </div>
+            `;
+            
+            const toastContainer = document.getElementById('toastContainer');
+            const toastElement = document.createElement('div');
+            toastElement.innerHTML = toastHtml;
+            toastContainer.appendChild(toastElement.firstElementChild);
+            
+            const toast = new bootstrap.Toast(toastContainer.lastElementChild);
+            toast.show();
+            
+            setTimeout(() => {
+                toastContainer.lastElementChild.remove();
+            }, 5000);
+        }
+    </script>
+    <script>
+        // Rules Management JavaScript - VersiÃ³n Simplificada y Robusta
+console.log('ðŸš€ Loading rules_management.js...');
+
+// Verificar que estamos en el entorno correcto
+if (typeof document === 'undefined') {
+    console.error('âŒ Document not available');
+}
+
+// Clase principal simplificada
+class RulesManager {
+    constructor() {
+        console.log('ðŸ“‹ Initializing RulesManager...');
+        this.rules = [];
+        this.filteredRules = [];
+        this.currentPage = 1;
+        this.itemsPerPage = 50;
+        this.totalPages = 0;
+        this.filters = { search: '', category: '', columns: {} };
+        this.pendingChanges = new Map();
+        
+        // Inicializar despuÃ©s de un breve delay para asegurar que DOM estÃ¡ listo
+        setTimeout(() => this.init(), 100);
+    }
+
+    init() {
+        console.log('ðŸ”§ Setting up event listeners...');
+        this.setupEventListeners();
+        this.loadRules();
+        this.updateCustomRulesCount();
+    }
+
+    setupEventListeners() {
+        // Core rules listeners
+        const ruleSearch = document.getElementById('ruleSearch');
+        const categoryFilter = document.getElementById('categoryFilter');
+        const applyButton = document.getElementById('applyChanges');
+        
+        if (ruleSearch) {
+            ruleSearch.addEventListener('input', (e) => {
+                this.filters.search = e.target.value.toLowerCase();
+                this.filterAndRenderRules();
+            });
+        }
+
+        if (categoryFilter) {
+            categoryFilter.addEventListener('change', (e) => {
+                this.filters.category = e.target.value;
+                this.filterAndRenderRules();
+            });
+        }
+
+        if (applyButton) {
+            applyButton.addEventListener('click', () => this.applyChanges());
+        }
+
+        // Custom rules listeners - con verificaciÃ³n robusta
+        this.setupCustomRulesListeners();
+        
+        console.log('âœ… Event listeners configured');
+    }
+
+    setupCustomRulesListeners() {
+        // MÃºltiples intentos para configurar listeners de custom rules
+        const attempts = [0, 500, 1000, 2000]; // Intentar en diferentes momentos
+        
+        attempts.forEach(delay => {
+            setTimeout(() => {
+                const customTab = document.getElementById('custom-rules-tab');
+                const refreshBtn = document.getElementById('refreshCustomRules');
+                
+                if (customTab && !customTab.hasAttribute('data-listener-attached')) {
+                    console.log(`ðŸŽ¯ Attaching custom rules listeners (attempt at ${delay}ms)`);
+                    
+                    // Marcar como procesado
+                    customTab.setAttribute('data-listener-attached', 'true');
+                    
+                    // Evento de Bootstrap
+                    customTab.addEventListener('shown.bs.tab', () => {
+                        console.log('ðŸŽ¯ Custom rules tab shown');
+                        this.loadCustomRules();
+                    });
+                    
+                    // Evento de click como backup
+                    customTab.addEventListener('click', () => {
+                        setTimeout(() => this.loadCustomRules(), 200);
+                    });
+                }
+                
+                if (refreshBtn && !refreshBtn.hasAttribute('data-listener-attached')) {
+                    refreshBtn.setAttribute('data-listener-attached', 'true');
+                    refreshBtn.addEventListener('click', () => this.loadCustomRules());
+                }
+            }, delay);
+        });
+    }
+
+    async loadRules() {
+        try {
+            this.showLoading();
+            const response = await fetch('/api/rules');
+            
+            if (response.ok) {
+                const data = await response.json();
+                this.rules = Array.isArray(data) ? data : [];
+                this.updateStatistics(this.calculateStatistics());
+            } else {
+                this.loadMockRules();
+            }
+            
+            this.filterAndRenderRules();
+        } catch (error) {
+            console.error('âŒ Error loading rules:', error);
+            this.loadMockRules();
+            this.filterAndRenderRules();
+        }
+    }
+
+    loadMockRules() {
+        this.rules = [
+            {
+                rule_id: '920100',
+                description: 'Invalid HTTP Request Line',
+                category: 'Protocol',
+                severity: 'CRITICAL',
+                current_action: 'block',
+                enabled: true
+            }
+        ];
+        this.updateStatistics(this.calculateStatistics());
+    }
+
+    calculateStatistics() {
+        const total = this.rules.length;
+        const active = this.rules.filter(r => r.enabled !== false).length;
+        const blocking = this.rules.filter(r => r.current_action === 'block').length;
+        return { total, active, blocking, monitoring: 0, disabled: 0 };
+    }
+
+    updateStatistics(stats) {
+        const elements = {
+            totalRules: document.getElementById('totalRules'),
+            activeRules: document.getElementById('activeRules'),
+            blockedRules: document.getElementById('blockedRules')
+        };
+        
+        if (elements.totalRules) elements.totalRules.textContent = stats.total || 0;
+        if (elements.activeRules) elements.activeRules.textContent = stats.active || 0;
+        if (elements.blockedRules) elements.blockedRules.textContent = stats.blocking || 0;
+    }
+
+    filterAndRenderRules() {
+        if (!Array.isArray(this.rules)) {
+            this.rules = [];
+            return;
+        }
+        
+        this.filteredRules = this.rules.filter(rule => {
+            if (!rule) return false;
+            
+            if (this.filters.search) {
+                const searchText = `${rule.rule_id || ''} ${rule.description || ''}`.toLowerCase();
+                if (!searchText.includes(this.filters.search)) return false;
+            }
+            
+            if (this.filters.category && rule.category !== this.filters.category) {
+                return false;
+            }
+            
+            return true;
+        });
+
+        this.currentPage = 1;
+        this.totalPages = Math.ceil(this.filteredRules.length / this.itemsPerPage);
+        this.renderRules();
+    }
+
+    renderRules() {
+        const tbody = document.getElementById('rulesTable');
+        if (!tbody) return;
+
+        const startIndex = (this.currentPage - 1) * this.itemsPerPage;
+        const endIndex = startIndex + this.itemsPerPage;
+        const pageRules = this.filteredRules.slice(startIndex, endIndex);
+
+        if (pageRules.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center py-5">
+                        <h5 class="text-muted">No rules found</h5>
+                        <p class="text-muted">Try adjusting your search criteria</p>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        const rowsHtml = pageRules.map(rule => this.createRuleRow(rule)).join('');
+        tbody.innerHTML = rowsHtml;
+    }
+
+    createRuleRow(rule) {
+        if (!rule || !rule.rule_id) {
+            return '<tr><td colspan="6" class="text-warning">Invalid rule data</td></tr>';
+        }
+
+        return `
+            <tr>
+                <td><code>${rule.rule_id}</code></td>
+                <td>${rule.description || 'No description'}</td>
+                <td><span class="badge bg-secondary">${rule.category || 'Unknown'}</span></td>
+                <td><span class="badge bg-danger">${rule.severity || 'Unknown'}</span></td>
+                <td><span class="badge bg-danger">${rule.current_action || 'block'}</span></td>
+                <td>
+                    <select class="form-select form-select-sm" data-rule-id="${rule.rule_id}">
+                        <option value="block" selected>Block</option>
+                        <option value="monitor">Monitor</option>
+                        <option value="disabled">Disabled</option>
+                    </select>
+                </td>
+            </tr>
+        `;
+    }
+
+    async applyChanges() {
+        console.log('âœ… Apply changes called');
+        this.showToast('Changes applied successfully', 'success');
+    }
+
+    showLoading() {
+        const tbody = document.getElementById('rulesTable');
+        if (tbody) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center py-5">
+                        <div class="spinner-border text-primary"></div>
+                        <div class="mt-2 text-muted">Loading rules...</div>
+                    </td>
+                </tr>
+            `;
+        }
+    }
+
+    showToast(message, type = 'info') {
+        console.log(`ðŸ“¢ Toast: ${message} (${type})`);
+        
+        // Crear toast si no existe el container
+        let toastContainer = document.getElementById('toastContainer');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'toastContainer';
+            toastContainer.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999;';
+            document.body.appendChild(toastContainer);
+        }
+        
+        const toast = document.createElement('div');
+        toast.className = `alert alert-${type} alert-dismissible fade show`;
+        toast.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+        `;
+        
+        toastContainer.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
+
+    // === CUSTOM RULES FUNCTIONALITY ===
+    
+    async loadCustomRules() {
+        console.log('ðŸ“‹ Loading custom rules...');
+        
+        const container = document.getElementById('customRulesContainer');
+        if (!container) {
+            console.error('âŒ customRulesContainer not found');
+            return;
+        }
+        
+        try {
+            container.innerHTML = `
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <div class="mt-2 text-muted">Loading custom rules...</div>
+                </div>
+            `;
+
+            const response = await fetch('/api/rules/custom/list');
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            console.log('ðŸ“Š Custom rules data:', data);
+            
+            const rules = data.rules || [];
+            
+            if (rules.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-5">
+                        <i class="bi bi-code-slash fs-1 text-muted"></i>
+                        <h5 class="text-muted mt-3">No custom rules yet</h5>
+                        <p class="text-muted">Create your first custom rule using the "Create Rule" tab</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const rulesHtml = rules.map(rule => this.createCustomRuleCard(rule)).join('');
+            container.innerHTML = rulesHtml;
+            
+            this.showToast(`Loaded ${rules.length} custom rules`, 'success');
+            
+        } catch (error) {
+            console.error('âŒ Error loading custom rules:', error);
+            container.innerHTML = `
+                <div class="text-center py-5">
+                    <div class="alert alert-danger">
+                        <h5>Error Loading Custom Rules</h5>
+                        <p>Failed to load custom rules: ${error.message}</p>
+                        <button class="btn btn-outline-primary" onclick="window.rulesManager.loadCustomRules()">
+                            ðŸ”„ Retry
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    createCustomRuleCard(rule) {
+        return `
+            <div class="card mb-3">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h6 class="mb-1">Rule ID: ${rule.rule_id || 'Unknown'}</h6>
+                            <p class="text-muted mb-2 small">${rule.description || 'No description available'}</p>
+                            <div class="code-snippet small mb-2" style="background: #f8f9fa; padding: 0.5rem; border-radius: 4px; font-family: monospace;">
+                                ${rule.preview || rule.rule_text}
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-outline-primary" onclick="window.rulesManager.viewFullRule('${rule.rule_id}')" title="View">
+                                    ðŸ‘ï¸
+                                </button>
+                                <button class="btn btn-sm btn-outline-info" onclick="window.rulesManager.copyCustomRule('${rule.rule_id}')" title="Copy">
+                                    ðŸ“‹
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="window.rulesManager.deleteCustomRule('${rule.rule_id}')" title="Delete">
+                                    ðŸ—‘ï¸
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    async viewFullRule(ruleId) {
+        try {
+            const response = await fetch('/api/rules/custom/list');
+            const data = await response.json();
+            const rule = data.rules.find(r => r.rule_id === ruleId);
+            
+            if (rule) {
+                alert(`Rule ${ruleId}:\n\n${rule.rule_text}`);
+            }
+        } catch (error) {
+            this.showToast('Error fetching rule details', 'danger');
+        }
+    }
+
+    async copyCustomRule(ruleId) {
+        try {
+            const response = await fetch('/api/rules/custom/list');
+            const data = await response.json();
+            const rule = data.rules.find(r => r.rule_id === ruleId);
+            
+            if (rule && navigator.clipboard) {
+                await navigator.clipboard.writeText(rule.rule_text);
+                this.showToast('Rule copied to clipboard', 'success');
+            }
+        } catch (error) {
+            this.showToast('Error copying rule', 'danger');
+        }
+    }
+
+    async deleteCustomRule(ruleId) {
+        if (confirm(`Delete custom rule ${ruleId}?`)) {
+            try {
+                const response = await fetch(`/api/rules/custom/${ruleId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    this.showToast('Rule deleted successfully', 'success');
+                    this.loadCustomRules();
+                    this.updateCustomRulesCount();
+                } else {
+                    throw new Error('Failed to delete rule');
+                }
+            } catch (error) {
+                this.showToast('Error deleting rule: ' + error.message, 'danger');
+            }
+        }
+    }
+
+    async updateCustomRulesCount() {
+        try {
+            const response = await fetch('/api/rules/custom/statistics');
+            if (response.ok) {
+                const stats = await response.json();
+                const countElement = document.getElementById('customRulesCount');
+                if (countElement) {
+                    countElement.textContent = stats.total_custom_rules || 0;
+                }
+            }
+        } catch (error) {
+            console.error('Error updating custom rules count:', error);
+        }
+    }
+}
+
+// === GLOBAL FUNCTIONS ===
+
+// FunciÃ³n de carga manual para debugging
+window.loadCustomRulesManually = function() {
+    console.log('ðŸ”§ Manual load triggered');
+    if (window.rulesManager) {
+        window.rulesManager.loadCustomRules();
+    } else {
+        console.error('âŒ RulesManager not available');
+        // Intentar crear una instancia si no existe
+        setTimeout(() => {
+            if (!window.rulesManager) {
+                console.log('ðŸ”„ Creating new RulesManager instance...');
+                window.rulesManager = new RulesManager();
+                setTimeout(() => {
+                    if (window.rulesManager) {
+                        window.rulesManager.loadCustomRules();
+                    }
+                }, 1000);
+            }
+        }, 100);
+    }
+};
+
+// FunciÃ³n para debugging
+window.debugRulesManager = function() {
+    console.log('=== RULES MANAGER DEBUG ===');
+    console.log('RulesManager class exists:', typeof RulesManager);
+    console.log('window.rulesManager exists:', !!window.rulesManager);
+    console.log('customRulesContainer exists:', !!document.getElementById('customRulesContainer'));
+    console.log('custom-rules-tab exists:', !!document.getElementById('custom-rules-tab'));
+    console.log('refreshCustomRules exists:', !!document.getElementById('refreshCustomRules'));
+    
+    // Test API
+    fetch('/api/rules/custom/list')
+        .then(r => r.json())
+        .then(data => console.log('API test result:', data))
+        .catch(err => console.error('API test failed:', err));
+};
+
+// === INITIALIZATION ===
+
+// InicializaciÃ³n robusta con mÃºltiples intentos
+function initializeRulesManager() {
+    console.log('ðŸš€ Initializing Rules Manager...');
+    
+    if (typeof RulesManager === 'undefined') {
+        console.error('âŒ RulesManager class not defined');
+        return;
+    }
+    
+    // Crear instancia global
+    window.rulesManager = new RulesManager();
+    console.log('âœ… RulesManager instance created');
+}
+
+// MÃºltiples puntos de inicializaciÃ³n
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeRulesManager);
+} else {
+    // DOM ya estÃ¡ listo
+    initializeRulesManager();
+}
+
+// Backup en caso de que DOMContentLoaded ya haya pasado
+setTimeout(initializeRulesManager, 500);
+
+console.log('ðŸ“‹ rules_management.js loaded successfully');
+    </script>
+</body>
+</html>
