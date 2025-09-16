@@ -1,0 +1,18 @@
+{
+  "nginx_access_log": "/var/log/nginx/access.log",
+  "nginx_error_log": "/var/log/nginx/error.log",
+  "LOG_FILE_PATH": "/var/log/modsec_audit.log",
+  "RULE_FILES_GLOB": "/etc/nginx/modsec/coreruleset-4.17.1/rules/*.conf",
+  "RULE_STATE_FILE": "/etc/nginx/modsec/coreruleset-4.17.1/rule_state.json",
+  "RULE_DIR": "/etc/nginx/modsec/coreruleset-4.17.1/rules",
+  "CUSTOM_RULES_FILE": "/etc/nginx/modsec/coreruleset-4.17.1/rules/modsecurity_crs_15_customrules.conf",
+  "EXCLUSIONS_DIR": "/etc/nginx/modsec/coreruleset-4.17.1/rules",
+  "EXCLUSIONS_FILE": "/etc/nginx/modsec/coreruleset-4.17.1/rules/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf",
+  "EXCLUSIONS_STATE_FILE": "/etc/nginx/modsec/coreruleset-4.17.1/exclusions_state.json",
+  "MONITOR_RULES_FILE": "/etc/nginx/modsec/coreruleset-4.17.1/rules/RESPONSE-999-CUSTOM-RULES.conf",
+  "DISABLED_RULES_FILE": "/etc/nginx/modsec/coreruleset-4.17.1/rules/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf",
+  "CRS_SETUP_PATH":"/etc/nginx/modsec/coreruleset-4.17.1/crs-setup.conf",
+  "host": "0.0.0.0",
+  "port": 5000,
+  "debug": false
+}

@@ -27,29 +27,36 @@ from parser import extract_rule_descriptions_from_log
 from models import LogEntry, RuleMessage, ModSecRule, RuleAction
 from modsec_rule_toggle import disable_rule, enable_rule, monitor_rule, log, load_state, save_state, cleanup_orphaned_rules
 
+# Cargar configuración (solo estas líneas)
+def load_config():
+    with open('config.json', 'r') as f:
+        return json.load(f)
+
+config = load_config()
+
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 PER_PAGE = 20
-LOG_FILE_PATH = "/var/log/modsec_audit.log"
+LOG_FILE_PATH = config['LOG_FILE_PATH']
 LOG_ENTRIES: List[LogEntry] = []
-RULE_FILES_GLOB = "/etc/nginx/modsec/coreruleset-4.17.1/rules/*.conf"
-RULE_STATE_FILE = "/etc/nginx/modsec/coreruleset-4.17.1/rule_state.json"
-RULE_DIR = "/etc/nginx/modsec/coreruleset-4.17.1/rules"
-CUSTOM_RULES_FILE = "/etc/nginx/modsec/coreruleset-4.17.1/rules/modsecurity_crs_15_customrules.conf"
+RULE_FILES_GLOB = config['RULE_FILES_GLOB']
+RULE_STATE_FILE = config['RULE_STATE_FILE']
+RULE_DIR = config['RULE_DIR']
+CUSTOM_RULES_FILE = config['CUSTOM_RULES_FILE']
 # In-memory rule change queue
 PENDING_RULE_UPDATES: Dict[str, RuleAction] = {}
 
 # Configuración de archivos de exclusiones
-EXCLUSIONS_DIR = "/etc/nginx/modsec/coreruleset-4.17.1/rules"
-EXCLUSIONS_FILE = os.path.join(EXCLUSIONS_DIR, "REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf")
-EXCLUSIONS_STATE_FILE = "/etc/nginx/modsec/coreruleset-4.17.1/exclusions_state.json"
+EXCLUSIONS_DIR = config['EXCLUSIONS_DIR']
+EXCLUSIONS_FILE = config['EXCLUSIONS_FILE']
+EXCLUSIONS_STATE_FILE = config['EXCLUSIONS_STATE_FILE']
 
 # Modelos para exclusiones
 class ExclusionType(str, Enum):
     REMOVE_BY_ID = "ruleRemoveById"
-    REMOVE_BY_TAG = "ruleRemoveByTag" 
+    REMOVE_BY_TAG = "ruleRemoveByTag"
     REMOVE_TARGET_BY_ID = "ruleRemoveTargetById"
     REMOVE_TARGET_BY_TAG = "ruleRemoveTargetByTag"
     DISABLE_ENGINE = "ruleEngine=Off"
@@ -104,19 +111,19 @@ class ExclusionUpdateRequest(BaseModel):
 
 class ExclusionManager:
     """Gestor de exclusiones de ModSecurity"""
-    
+
     def __init__(self):
         self.ensure_exclusions_file()
         self.ensure_state_file()
         self.clean_corrupted_file()
-    
+
     def clean_corrupted_file(self):
         """Limpia archivos corruptos existentes"""
         try:
             if os.path.exists(EXCLUSIONS_FILE):
                 with open(EXCLUSIONS_FILE, 'r') as f:
                     content = f.read()
-                    
+
                 # Si contiene referencias a las clases, limpiar
                 if 'ExclusionCondition.' in content or 'ExclusionOperator.' in content:
                     print("Detected corrupted exclusions file, cleaning...")
@@ -125,21 +132,21 @@ class ExclusionManager:
                     print("Exclusions file cleaned")
         except Exception as e:
             print(f"Error cleaning file: {e}")
-    
+
     def ensure_exclusions_file(self):
         """Asegura que el archivo de exclusiones existe"""
         if not os.path.exists(EXCLUSIONS_FILE):
             os.makedirs(os.path.dirname(EXCLUSIONS_FILE), exist_ok=True)
             with open(EXCLUSIONS_FILE, 'w') as f:
                 f.write(self._get_file_header())
-    
+
     def ensure_state_file(self):
         """Asegura que el archivo de estado existe"""
         if not os.path.exists(EXCLUSIONS_STATE_FILE):
             os.makedirs(os.path.dirname(EXCLUSIONS_STATE_FILE), exist_ok=True)
             with open(EXCLUSIONS_STATE_FILE, 'w') as f:
                 json.dump({"exclusions": {}}, f, indent=2)
-    
+
     def _get_file_header(self) -> str:
         """Obtiene el header del archivo de exclusiones"""
         return """# ----------------------------------------------------------------
@@ -159,27 +166,27 @@ class ExclusionManager:
         """Genera un ID único para la exclusión"""
         timestamp = int(datetime.now().timestamp())
         return f"90000{timestamp % 10000}"
-    
+
     def _generate_exclusion_rule_text(self, exclusion: ExclusionRule) -> str:
         """Genera el texto de la regla de exclusión"""
         rule_id = exclusion.id or self._generate_rule_id()
-        
+
         # Asegurar que usamos strings directamente
         condition_var = str(exclusion.condition_variable)
         operator = str(exclusion.operator)
         condition_value = str(exclusion.condition_value)
         exclusion_type = str(exclusion.exclusion_type)
         exclusion_value = str(exclusion.exclusion_value)
-        
+
         # Debug print
         print(f"DEBUG: Generating rule for {exclusion.name}")
         print(f"  condition_var: {condition_var}")
         print(f"  operator: {operator}")
         print(f"  exclusion_type: {exclusion_type}")
-        
+
         # Construir la condición
         condition = f'{condition_var} "{operator} {condition_value}"'
-        
+
         # Construir la acción de exclusión
         if exclusion_type == "ruleEngine=Off":
             exclusion_action = "ctl:ruleEngine=Off"
@@ -195,12 +202,12 @@ class ExclusionManager:
                 exclusion_action = f"ctl:ruleRemoveTargetByTag={exclusion_value}"
         else:
             exclusion_action = f"ctl:{exclusion_type}={exclusion_value}"
-        
+
         # Generar comentario descriptivo
         comment = f"# {exclusion.name}"
         if exclusion.description:
             comment += f"\n# {exclusion.description}"
-        
+
         # Generar la regla completa
         rule_text = f"""{comment}
 SecRule {condition} \\
@@ -211,12 +218,12 @@ SecRule {condition} \\
     {exclusion_action}"
 
 """
-        
+
         # Debug print del resultado
         print(f"Generated rule text:\n{rule_text}")
-        
+
         return rule_text
-    
+
     def load_exclusions_state(self) -> Dict:
         """Carga el estado de las exclusiones"""
         try:
@@ -224,17 +231,17 @@ SecRule {condition} \\
                 return json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             return {"exclusions": {}}
-    
+
     def save_exclusions_state(self, state: Dict):
         """Guarda el estado de las exclusiones"""
         with open(EXCLUSIONS_STATE_FILE, 'w') as f:
             json.dump(state, f, indent=2, default=str)
-    
+
     def get_all_exclusions(self) -> List[ExclusionRule]:
         """Obtiene todas las exclusiones"""
         state = self.load_exclusions_state()
         exclusions = []
-        
+
         for exclusion_id, data in state.get("exclusions", {}).items():
             try:
                 # Asegurar que created_at y last_modified son datetime objects
@@ -242,7 +249,7 @@ SecRule {condition} \\
                     data['created_at'] = datetime.fromisoformat(data['created_at'].replace('Z', '+00:00'))
                 if isinstance(data.get('last_modified'), str):
                     data['last_modified'] = datetime.fromisoformat(data['last_modified'].replace('Z', '+00:00'))
-                
+
                 exclusion = ExclusionRule(
                     id=exclusion_id,
                     **data
@@ -251,59 +258,59 @@ SecRule {condition} \\
             except Exception as e:
                 print(f"Error loading exclusion {exclusion_id}: {e}")
                 continue
-        
+
         return exclusions
-    
+
     def get_exclusion(self, exclusion_id: str) -> Optional[ExclusionRule]:
         """Obtiene una exclusión específica"""
         state = self.load_exclusions_state()
         exclusion_data = state.get("exclusions", {}).get(exclusion_id)
-        
+
         if exclusion_data:
             try:
                 if isinstance(exclusion_data.get('created_at'), str):
                     exclusion_data['created_at'] = datetime.fromisoformat(exclusion_data['created_at'].replace('Z', '+00:00'))
                 if isinstance(exclusion_data.get('last_modified'), str):
                     exclusion_data['last_modified'] = datetime.fromisoformat(exclusion_data['last_modified'].replace('Z', '+00:00'))
-                
+
                 return ExclusionRule(id=exclusion_id, **exclusion_data)
             except Exception as e:
                 print(f"Error loading exclusion {exclusion_id}: {e}")
         return None
-    
+
     def create_exclusion(self, exclusion_request: ExclusionCreateRequest) -> ExclusionRule:
         """Crea una nueva exclusión"""
         exclusion_data = exclusion_request.dict()
         exclusion_data['created_at'] = datetime.now()
         exclusion_data['last_modified'] = datetime.now()
-        
+
         exclusion = ExclusionRule(
             id=self._generate_rule_id(),
             **exclusion_data
         )
-        
+
         print(f"Creating exclusion: {exclusion.name}")
         print(f"Request data: {exclusion_request.dict()}")
-        
+
         # Guardar en el estado - convertir a dict para JSON
         state = self.load_exclusions_state()
         exclusion_dict = exclusion.dict(exclude={"id"})
         state["exclusions"][exclusion.id] = exclusion_dict
         self.save_exclusions_state(state)
-        
+
         # Regenerar archivo de exclusiones
         self._regenerate_exclusions_file()
-        
+
         return exclusion
-    
+
     def update_exclusion(self, exclusion_id: str, update_request: ExclusionUpdateRequest) -> Optional[ExclusionRule]:
         """Actualiza una exclusión existente"""
         state = self.load_exclusions_state()
         exclusion_data = state.get("exclusions", {}).get(exclusion_id)
-        
+
         if not exclusion_data:
             return None
-        
+
         # Actualizar campos
         update_data = update_request.dict(exclude_unset=True)
         if update_data:
@@ -311,52 +318,52 @@ SecRule {condition} \\
             exclusion_data["last_modified"] = datetime.now()
             state["exclusions"][exclusion_id] = exclusion_data
             self.save_exclusions_state(state)
-            
+
             # Regenerar archivo si se habilitó/deshabilitó
             if "enabled" in update_data:
                 self._regenerate_exclusions_file()
-        
+
         # Crear object para retorno
         if isinstance(exclusion_data.get('created_at'), str):
             exclusion_data['created_at'] = datetime.fromisoformat(exclusion_data['created_at'].replace('Z', '+00:00'))
         if isinstance(exclusion_data.get('last_modified'), str):
             exclusion_data['last_modified'] = datetime.fromisoformat(exclusion_data['last_modified'].replace('Z', '+00:00'))
-            
+
         return ExclusionRule(id=exclusion_id, **exclusion_data)
-    
+
     def delete_exclusion(self, exclusion_id: str) -> bool:
         """Elimina una exclusión"""
         state = self.load_exclusions_state()
-        
+
         if exclusion_id in state.get("exclusions", {}):
             del state["exclusions"][exclusion_id]
             self.save_exclusions_state(state)
             self._regenerate_exclusions_file()
             return True
-        
+
         return False
-    
+
     def _regenerate_exclusions_file(self):
         """Regenera el archivo de exclusiones completo"""
         exclusions = self.get_all_exclusions()
         enabled_exclusions = [ex for ex in exclusions if ex.enabled]
-        
+
         content = self._get_file_header()
-        
+
         for exclusion in enabled_exclusions:
             content += self._generate_exclusion_rule_text(exclusion) + "\n"
-        
+
         print(f"Writing {len(enabled_exclusions)} exclusions to {EXCLUSIONS_FILE}")
-        
+
         # Escribir archivo
         with open(EXCLUSIONS_FILE, 'w') as f:
             f.write(content)
-        
+
         print(f"Exclusions file updated successfully")
-        
+
         # Recargar nginx
         try:
-            result = subprocess.run(['sudo', 'systemctl', 'reload', 'nginx'], 
+            result = subprocess.run(['sudo', 'systemctl', 'reload', 'nginx'],
                                   check=True, capture_output=True, text=True)
             print("Nginx reloaded successfully")
         except subprocess.CalledProcessError as e:
@@ -367,26 +374,26 @@ SecRule {condition} \\
 
 class CustomRulesManager:
     """Gestor mejorado de reglas personalizadas de ModSecurity con soporte para estados"""
-    
+
     def __init__(self):
         self.ensure_custom_rules_file()
-        self.custom_rules_state_file = "/etc/nginx/modsec/coreruleset-4.17.1/custom_rules_state.json"
+        self.custom_rules_state_file = "/etc/modsecurity.d/owasp-crs/rules/custom_rules_state.json"
         self.ensure_state_file()
-    
+
     def ensure_custom_rules_file(self):
         """Asegura que el archivo de reglas personalizadas existe"""
         if not os.path.exists(CUSTOM_RULES_FILE):
             os.makedirs(os.path.dirname(CUSTOM_RULES_FILE), exist_ok=True)
             with open(CUSTOM_RULES_FILE, 'w') as f:
                 f.write(self._get_custom_rules_header())
-    
+
     def ensure_state_file(self):
         """Asegura que el archivo de estado de custom rules existe"""
         if not os.path.exists(self.custom_rules_state_file):
             os.makedirs(os.path.dirname(self.custom_rules_state_file), exist_ok=True)
             with open(self.custom_rules_state_file, 'w') as f:
                 json.dump({"custom_rules": {}}, f, indent=2)
-    
+
     def _get_custom_rules_header(self) -> str:
         """Obtiene el header del archivo de reglas personalizadas"""
         return """# ================================================================
@@ -402,7 +409,7 @@ class CustomRulesManager:
         """Extrae el ID de una regla desde su texto"""
         match = re.search(r'id[:=]["\']?(\d+)["\']?', rule_text)
         return match.group(1) if match else None
-    
+
     def load_custom_rules_state(self) -> Dict:
         """Carga el estado de las custom rules"""
         try:
@@ -410,45 +417,45 @@ class CustomRulesManager:
                 return json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             return {"custom_rules": {}}
-    
+
     def save_custom_rules_state(self, state: Dict):
         """Guarda el estado de las custom rules"""
         with open(self.custom_rules_state_file, 'w') as f:
             json.dump(state, f, indent=2, default=str)
-    
+
     def get_all_custom_rules(self) -> List[dict]:
         """Obtiene todas las reglas personalizadas con su estado"""
         try:
             if not os.path.exists(CUSTOM_RULES_FILE):
                 return []
-            
+
             with open(CUSTOM_RULES_FILE, 'r') as f:
                 content = f.read()
-            
+
             rules = []
             state = self.load_custom_rules_state()
             custom_rules_state = state.get("custom_rules", {})
-            
+
             # Buscar reglas SecRule
             rule_pattern = re.compile(
                 r'((?:^#[^\n]*\n)*)'  # Comentarios opcionales
                 r'^(SecRule\s[^"]*"[^"]*"[^"]*"[^"]*")',  # La regla SecRule
                 re.MULTILINE
             )
-            
+
             for match in rule_pattern.finditer(content):
                 comments = match.group(1).strip()
                 rule_text = match.group(2).strip()
-                
+
                 rule_id = self._extract_rule_id(rule_text)
                 if not rule_id:
                     continue
-                
+
                 # Obtener estado de la regla
                 rule_state = custom_rules_state.get(rule_id, {})
                 current_action = rule_state.get('current_action', 'block')
                 enabled = rule_state.get('enabled', True)
-                
+
                 # Extraer descripción de los comentarios
                 description = None
                 if comments:
@@ -458,12 +465,12 @@ class CustomRulesManager:
                             if comment_text and not comment_text.startswith('=') and 'Custom Rule ID:' not in comment_text:
                                 description = comment_text
                                 break
-                
+
                 # Crear preview
                 preview = rule_text
                 if len(preview) > 100:
                     preview = preview[:100] + "..."
-                
+
                 rules.append({
                     "rule_id": rule_id,
                     "rule_text": rule_text,
@@ -474,13 +481,13 @@ class CustomRulesManager:
                     "created_at": rule_state.get('created_at', datetime.now().isoformat()),
                     "last_modified": rule_state.get('last_modified', datetime.now().isoformat())
                 })
-            
+
             return rules
-            
+
         except Exception as e:
             print(f"Error loading custom rules: {e}")
             return []
-    
+
     def add_custom_rule(self, rule_text: str, description: str = None) -> bool:
         """Añade una nueva regla personalizada"""
         try:
@@ -488,22 +495,22 @@ class CustomRulesManager:
             rule_id = self._extract_rule_id(rule_text)
             if not rule_id:
                 raise ValueError("Rule must have a valid ID")
-            
+
             # Verificar que el ID no esté en uso
             if self.rule_id_exists(rule_id):
                 raise ValueError(f"Rule ID {rule_id} already exists")
-            
+
             # Leer contenido existente
             existing_content = ""
             if os.path.exists(CUSTOM_RULES_FILE):
                 with open(CUSTOM_RULES_FILE, 'r') as f:
                     existing_content = f.read()
-            
+
             # Si el archivo no tiene header, crearlo
             if not existing_content or "CUSTOM MODSECURITY RULES" not in existing_content:
                 with open(CUSTOM_RULES_FILE, 'w') as f:
                     f.write(self._get_custom_rules_header())
-            
+
             # Agregar la nueva regla
             with open(CUSTOM_RULES_FILE, 'a') as f:
                 f.write(f"\n# Custom Rule ID: {rule_id}\n")
@@ -511,7 +518,7 @@ class CustomRulesManager:
                     f.write(f"# Description: {description}\n")
                 f.write(f"# Added: {datetime.now().isoformat()}\n")
                 f.write(f"{rule_text}\n\n")
-            
+
             # Crear estado inicial de la regla
             state = self.load_custom_rules_state()
             state["custom_rules"][rule_id] = {
@@ -522,13 +529,13 @@ class CustomRulesManager:
                 "description": description
             }
             self.save_custom_rules_state(state)
-            
+
             return True
-            
+
         except Exception as e:
             print(f"Error adding custom rule: {e}")
             return False
-    
+
     def rule_id_exists(self, rule_id: str) -> bool:
         """Verifica si un rule ID ya existe (custom rules o core rules)"""
         # Verificar en custom rules
@@ -536,7 +543,7 @@ class CustomRulesManager:
         for rule in rules:
             if rule["rule_id"] == rule_id:
                 return True
-        
+
         # Verificar en core rules usando el sistema existente
         try:
             core_rules = load_rules_from_files()
@@ -545,18 +552,18 @@ class CustomRulesManager:
                     return True
         except:
             pass
-        
+
         return False
-    
+
     def update_custom_rule_action(self, rule_id: str, action: str) -> bool:
         """Actualiza la acción de una custom rule"""
         try:
             if action not in ['block', 'monitor', 'disabled']:
                 raise ValueError(f"Invalid action: {action}")
-            
+
             state = self.load_custom_rules_state()
             custom_rules = state.get("custom_rules", {})
-            
+
             if rule_id not in custom_rules:
                 # Crear entrada si no existe
                 custom_rules[rule_id] = {
@@ -565,15 +572,15 @@ class CustomRulesManager:
                     "created_at": datetime.now().isoformat(),
                     "last_modified": datetime.now().isoformat()
                 }
-            
+
             # Actualizar acción
             custom_rules[rule_id]["current_action"] = action
             custom_rules[rule_id]["enabled"] = action != "disabled"
             custom_rules[rule_id]["last_modified"] = datetime.now().isoformat()
-            
+
             state["custom_rules"] = custom_rules
             self.save_custom_rules_state(state)
-            
+
             # Usar el sistema existente de toggle para aplicar los cambios
             if action == "disabled":
                 disable_rule(rule_id)
@@ -581,62 +588,62 @@ class CustomRulesManager:
                 monitor_rule(rule_id)
             elif action == "block":
                 enable_rule(rule_id)
-            
+
             log(f"Custom rule {rule_id} set to {action}")
             return True
-            
+
         except Exception as e:
             print(f"Error updating custom rule action {rule_id}: {e}")
             return False
-    
+
     def delete_custom_rule(self, rule_id: str) -> bool:
         """Elimina una regla personalizada - VERSIÓN CORREGIDA"""
         try:
             if not os.path.exists(CUSTOM_RULES_FILE):
                 return False
-            
+
             print(f"Attempting to delete custom rule {rule_id}")
-            
+
             with open(CUSTOM_RULES_FILE, 'r') as f:
                 content = f.read()
-            
+
             # Patrón mejorado para buscar y remover la regla con sus comentarios
             # Busca desde el comentario "Custom Rule ID: X" hasta la regla SecRule completa
             pattern = rf'(?:^#[^\n]*Custom Rule ID:\s*{rule_id}[^\n]*\n)(?:^#[^\n]*\n)*^SecRule[^\n]*id[:\s]*["\']?{rule_id}["\']?[^"]*"[^\n]*(?:\\\n[^\n]*)*\n*'
-            
+
             # También intentar patrón alternativo más simple
             if not re.search(pattern, content, re.MULTILINE):
                 # Patrón alternativo: buscar cualquier línea que contenga el rule_id
                 pattern = rf'^.*id[:\s]*["\']?{rule_id}["\']?.*(?:\\\n.*)*\n*'
-            
+
             new_content = re.sub(pattern, '', content, flags=re.MULTILINE)
-            
+
             # Verificar si realmente se eliminó algo
             if new_content == content:
                 print(f"Rule {rule_id} not found in file, checking by line scan...")
-                
+
                 # Método alternativo: escanear línea por línea
                 lines = content.split('\n')
                 new_lines = []
                 skip_until_rule_end = False
                 found_rule = False
-                
+
                 for line in lines:
                     # Si encontramos una línea que menciona nuestro rule_id
                     if f'id:{rule_id}' in line or f'id:"{rule_id}"' in line or f"id:'{rule_id}" in line:
                         skip_until_rule_end = True
                         found_rule = True
                         continue
-                        
+
                     # Si estamos saltando líneas y encontramos una línea que no termina en \
                     if skip_until_rule_end:
                         if not line.strip().endswith('\\') and line.strip():
                             skip_until_rule_end = False
                         continue
-                        
+
                     # Si no estamos saltando, mantener la línea
                     new_lines.append(line)
-                
+
                 if found_rule:
                     new_content = '\n'.join(new_lines)
                     print(f"Rule {rule_id} found and removed using line scan method")
@@ -651,13 +658,13 @@ class CustomRulesManager:
                         self.save_custom_rules_state(state)
                         print(f"Removed rule {rule_id} from state file only")
                     return True
-            
+
             # Escribir el contenido actualizado
             with open(CUSTOM_RULES_FILE, 'w') as f:
                 f.write(new_content)
-            
+
             print(f"Custom rule {rule_id} removed from file")
-            
+
             # Remover del estado
             state = self.load_custom_rules_state()
             custom_rules = state.get("custom_rules", {})
@@ -666,51 +673,51 @@ class CustomRulesManager:
                 state["custom_rules"] = custom_rules
                 self.save_custom_rules_state(state)
                 print(f"Removed rule {rule_id} from custom rules state")
-            
+
             # CORRECCIÓN: Solo limpiar de los estados de toggle si la regla está ahí
             # No llamar enable_rule() automáticamente ya que puede causar problemas
             try:
                 # Verificar si la regla está en los estados de toggle antes de intentar limpiarla
                 toggle_state = load_state()
-                
+
                 rule_in_disabled = rule_id in toggle_state.get('disabled_rules', {})
                 rule_in_monitor = rule_id in toggle_state.get('monitor_rules', {})
-                
+
                 if rule_in_disabled or rule_in_monitor:
                     print(f"Rule {rule_id} found in toggle states, cleaning up...")
-                    
+
                     # Limpiar manualmente de los estados sin llamar enable_rule
                     if rule_in_disabled:
                         del toggle_state['disabled_rules'][rule_id]
                     if rule_in_monitor:
                         del toggle_state['monitor_rules'][rule_id]
-                    
+
                     save_state(toggle_state)
-                    
+
                     # Regenerar archivos de configuración
                     from modsec_rule_toggle import regenerate_disabled_rules_file, regenerate_monitor_rules_file
                     regenerate_disabled_rules_file()
                     regenerate_monitor_rules_file()
-                    
+
                     # Recargar nginx
                     subprocess.run(['sudo', 'systemctl', 'reload', 'nginx'], check=True)
                     print(f"Cleaned rule {rule_id} from toggle states and reloaded nginx")
                 else:
                     print(f"Rule {rule_id} not found in toggle states, no cleanup needed")
-                    
+
             except Exception as e:
                 print(f"Warning: Could not clean toggle states for rule {rule_id}: {e}")
                 # No fallar por esto, la regla ya se eliminó del archivo custom
-            
+
             log(f"Custom rule {rule_id} deleted successfully")
             return True
-            
+
         except Exception as e:
             print(f"Error deleting custom rule {rule_id}: {e}")
             import traceback
             traceback.print_exc()
             return False
-    
+
     def get_custom_rule(self, rule_id: str) -> dict:
         """Obtiene una custom rule específica"""
         rules = self.get_all_custom_rules()
@@ -718,46 +725,46 @@ class CustomRulesManager:
             if rule["rule_id"] == rule_id:
                 return rule
         return None
-    
+
     def get_statistics(self) -> dict:
         """Obtiene estadísticas de las reglas personalizadas - VERSIÓN CORREGIDA"""
         try:
             rules = self.get_all_custom_rules()
             total = len(rules)
-            
+
             # Inicializar contadores con valores por defecto
             active = 0
             blocking = 0
             monitoring = 0
             disabled = 0
-            
+
             # Contar de forma segura
             for rule in rules:
                 try:
                     enabled = rule.get("enabled", True)
                     current_action = rule.get("current_action", "block")
-                    
+
                     if enabled:
                         active += 1
-                        
+
                     if current_action == "block" and enabled:
                         blocking += 1
                     elif current_action == "monitor":
                         monitoring += 1
                     elif current_action == "disabled":
                         disabled += 1
-                        
+
                 except Exception as e:
                     print(f"Error processing rule {rule.get('rule_id', 'unknown')}: {e}")
                     # Continuar con la siguiente regla
                     continue
-            
+
             # Calcular reglas recientes (últimos 7 días) de forma segura
             recent = 0
             try:
                 from datetime import datetime, timedelta
                 seven_days_ago = datetime.now() - timedelta(days=7)
-                
+
                 for rule in rules:
                     try:
                         created_at_str = rule.get("created_at")
@@ -778,11 +785,11 @@ class CustomRulesManager:
                     except Exception as e:
                         print(f"Error calculating recent date for rule {rule.get('rule_id', 'unknown')}: {e}")
                         continue
-                        
+
             except Exception as e:
                 print(f"Error calculating recent rules: {e}")
                 recent = 0
-            
+
             return {
                 "total_custom_rules": total,
                 "active_rules": active,
@@ -791,12 +798,12 @@ class CustomRulesManager:
                 "disabled_rules": disabled,
                 "recent_rules": recent
             }
-            
+
         except Exception as e:
             print(f"Error in get_statistics: {e}")
             import traceback
             traceback.print_exc()
-            
+
             # Retornar estadísticas por defecto en caso de error
             return {
                 "total_custom_rules": 0,
@@ -817,7 +824,7 @@ class CustomRulesManager:
             "in_toggle_monitor": False,
             "file_content_match": False
         }
-        
+
         try:
             # Verificar en archivo custom
             if os.path.exists(CUSTOM_RULES_FILE):
@@ -826,12 +833,12 @@ class CustomRulesManager:
                     if f'id:{rule_id}' in content or f'id:"{rule_id}"' in content or f"id:'{rule_id}'" in content:
                         result["in_custom_file"] = True
                         result["file_content_match"] = True
-            
+
             # Verificar en estado custom
             state = self.load_custom_rules_state()
             if rule_id in state.get("custom_rules", {}):
                 result["in_custom_state"] = True
-            
+
             # Verificar en estados de toggle
             try:
                 toggle_state = load_state()
@@ -841,10 +848,10 @@ class CustomRulesManager:
                     result["in_toggle_monitor"] = True
             except:
                 pass
-                
+
         except Exception as e:
             result["error"] = str(e)
-        
+
         return result
 
     def cleanup_orphaned_custom_rules(self) -> dict:
@@ -854,7 +861,7 @@ class CustomRulesManager:
             "cleaned_from_toggle": [],
             "errors": []
         }
-        
+
         try:
             # Obtener reglas que realmente existen en el archivo
             existing_rules = set()
@@ -864,59 +871,59 @@ class CustomRulesManager:
                     # Buscar todos los rule IDs en el archivo
                     matches = re.findall(r'id[:=]["\']?(\d+)["\']?', content)
                     existing_rules.update(matches)
-            
+
             # Limpiar del estado custom
             state = self.load_custom_rules_state()
             custom_rules = state.get("custom_rules", {})
             rules_to_remove = []
-            
+
             for rule_id in custom_rules.keys():
                 if rule_id not in existing_rules:
                     rules_to_remove.append(rule_id)
-            
+
             for rule_id in rules_to_remove:
                 del custom_rules[rule_id]
                 cleanup_result["cleaned_from_state"].append(rule_id)
-            
+
             if rules_to_remove:
                 state["custom_rules"] = custom_rules
                 self.save_custom_rules_state(state)
-            
+
             # Limpiar de estados de toggle
             try:
                 toggle_state = load_state()
                 toggle_cleaned = []
-                
+
                 # Limpiar disabled rules
                 disabled_to_remove = []
                 for rule_id in toggle_state.get("disabled_rules", {}).keys():
                     if rule_id not in existing_rules and rule_id.startswith('9'):  # Custom rules generalmente 9XXXX
                         disabled_to_remove.append(rule_id)
-                
+
                 for rule_id in disabled_to_remove:
                     del toggle_state["disabled_rules"][rule_id]
                     toggle_cleaned.append(rule_id)
-                
+
                 # Limpiar monitor rules
                 monitor_to_remove = []
                 for rule_id in toggle_state.get("monitor_rules", {}).keys():
                     if rule_id not in existing_rules and rule_id.startswith('9'):  # Custom rules generalmente 9XXXX
                         monitor_to_remove.append(rule_id)
-                
+
                 for rule_id in monitor_to_remove:
                     del toggle_state["monitor_rules"][rule_id]
                     toggle_cleaned.append(rule_id)
-                
+
                 if toggle_cleaned:
                     save_state(toggle_state)
                     cleanup_result["cleaned_from_toggle"] = toggle_cleaned
-                    
+
             except Exception as e:
                 cleanup_result["errors"].append(f"Error cleaning toggle states: {e}")
-        
+
         except Exception as e:
             cleanup_result["errors"].append(f"Error in cleanup: {e}")
-        
+
         return cleanup_result
 
 # Instancia global del gestor de exclusiones
@@ -985,7 +992,7 @@ def parse_modsecurity_logs(file_path):
 
         # ---- Bloque E: Body ----
         body_section = m.group('E').strip() if m.group('E') else ''
-        
+
         # ---- Bloque F: Response ----
         response_section = m.group('F')
         status_code = None
@@ -1186,10 +1193,10 @@ def get_rule_current_action(rule_id: str) -> RuleAction:
     # Primero verificar cambios pendientes
     if rule_id in PENDING_RULE_UPDATES:
         return PENDING_RULE_UPDATES[rule_id]
-    
+
     # Cargar estados guardados
     states = load_rule_states()
-    
+
     if rule_id in states.get("disabled_rules", {}):
         return RuleAction.DISABLED
     elif rule_id in states.get("monitor_rules", {}):
@@ -1204,15 +1211,15 @@ def load_rules_from_files(log_msg_map: Dict[str, str] = None) -> List[ModSecRule
     """
     rules = []
     rule_files = glob.glob(RULE_FILES_GLOB)
-    
+
     # Excluir archivos de gestión personalizada
     excluded_files = [
         "RESPONSE-999-CUSTOM-RULES.conf",
         "REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf"
     ]
-    
+
     rule_files = [f for f in rule_files if not any(excl in f for excl in excluded_files)]
-    
+
     # Load current rule states
     rule_states = load_rule_states()
     disabled_rules = rule_states.get("disabled_rules", {})
@@ -1355,9 +1362,9 @@ def load_rules_from_files(log_msg_map: Dict[str, str] = None) -> List[ModSecRule
             # This is a rule that exists only in state file
             rule_info = disabled_rules.get(rule_id) or monitor_rules.get(rule_id, {})
             filename = rule_info.get('file', 'unknown')
-            
+
             current_action = RuleAction.DISABLED if rule_id in disabled_rules else RuleAction.MONITOR
-            
+
             rules.append(ModSecRule(
                 rule_id=rule_id,
                 file_name=filename,
@@ -1372,7 +1379,7 @@ def load_rules_from_files(log_msg_map: Dict[str, str] = None) -> List[ModSecRule
     print(f"  Active: {len([r for r in rules if r.current_action == RuleAction.BLOCK])}")
     print(f"  Monitor: {len([r for r in rules if r.current_action == RuleAction.MONITOR])}")
     print(f"  Disabled: {len([r for r in rules if r.current_action == RuleAction.DISABLED])}")
-    
+
     return rules
 
 def find_rule_by_id(rule_id: str) -> ModSecRule:
@@ -1442,9 +1449,9 @@ async def get_rules_statistics():
     try:
         # Ejecutar limpieza de reglas huérfanas antes de obtener estadísticas
         cleanup_orphaned_rules()
-        
+
         rules = load_rules_from_files()
-        
+
         stats = {
             "total": len(rules),
             "active": len([r for r in rules if r.current_action == RuleAction.BLOCK]),
@@ -1453,13 +1460,13 @@ async def get_rules_statistics():
             "by_category": {},
             "by_severity": {}
         }
-        
+
         for rule in rules:
             # Por categoría
             category = rule.category
             if category not in stats["by_category"]:
                 stats["by_category"][category] = {"total": 0, "active": 0, "monitor": 0, "disabled": 0}
-            
+
             stats["by_category"][category]["total"] += 1
             if rule.current_action == RuleAction.BLOCK:
                 stats["by_category"][category]["active"] += 1
@@ -1467,12 +1474,12 @@ async def get_rules_statistics():
                 stats["by_category"][category]["monitor"] += 1
             elif rule.current_action == RuleAction.DISABLED:
                 stats["by_category"][category]["disabled"] += 1
-            
+
             # Por severidad
             severity = rule.severity or "Unknown"
             if severity not in stats["by_severity"]:
                 stats["by_severity"][severity] = {"total": 0, "active": 0, "monitor": 0, "disabled": 0}
-            
+
             stats["by_severity"][severity]["total"] += 1
             if rule.current_action == RuleAction.BLOCK:
                 stats["by_severity"][severity]["active"] += 1
@@ -1480,7 +1487,7 @@ async def get_rules_statistics():
                 stats["by_severity"][severity]["monitor"] += 1
             elif rule.current_action == RuleAction.DISABLED:
                 stats["by_severity"][severity]["disabled"] += 1
-        
+
         return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting statistics: {str(e)}")
@@ -1538,7 +1545,7 @@ async def list_custom_rules():
     try:
         rules = custom_rules_manager.get_all_custom_rules()
         return {"rules": rules}
-        
+
     except Exception as e:
         print(f"Error listing custom rules: {e}")
         import traceback
@@ -1550,27 +1557,27 @@ async def get_custom_rules_statistics():
     """Obtiene estadísticas detalladas de reglas personalizadas"""
     try:
         stats = custom_rules_manager.get_statistics()
-        
+
         # Obtener distribución por estados
         rules = custom_rules_manager.get_all_custom_rules()
         by_action = {}
         by_status = {"enabled": 0, "disabled": 0}
-        
+
         for rule in rules:
             action = rule.get("current_action", "block")
             by_action[action] = by_action.get(action, 0) + 1
-            
+
             status = "enabled" if rule.get("enabled", True) else "disabled"
             by_status[status] += 1
-        
+
         stats.update({
             "by_action": by_action,
             "by_status": by_status,
             "rules_detail": rules if len(rules) <= 10 else rules[:10]  # Incluir detalle si hay pocas reglas
         })
-        
+
         return stats
-        
+
     except Exception as e:
         print(f"Error getting custom rules statistics: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting statistics: {str(e)}")
@@ -1591,28 +1598,28 @@ async def update_custom_rule_action(rule_id: str, req: UpdateActionRequest):
     """Actualiza la acción de una custom rule"""
     try:
         print(f"Received request to update custom rule {rule_id} with action: {req.action}")
-        
+
         # Verificar que la regla existe antes de intentar eliminarla
         rule = custom_rules_manager.get_custom_rule(rule_id)
         if not rule:
             print(f"Custom rule {rule_id} not found")
             raise HTTPException(status_code=404, detail="Custom rule not found")
-        
+
         # Actualizar la acción
         success = custom_rules_manager.update_custom_rule_action(rule_id, req.action.value)
-        
+
         if not success:
             raise HTTPException(
-                status_code=500, 
+                status_code=500,
                 detail=f"Failed to update custom rule {rule_id} action"
             )
-        
+
         return {
             "message": f"Custom rule {rule_id} successfully updated to '{req.action}'",
             "rule_id": rule_id,
             "new_action": req.action.value
         }
-        
+
     except HTTPException as e:
         raise e
     except ValueError as e:
@@ -1633,23 +1640,23 @@ async def toggle_custom_rule(rule_id: str):
         rule = custom_rules_manager.get_custom_rule(rule_id)
         if not rule:
             raise HTTPException(status_code=404, detail="Custom rule not found")
-        
+
         # Determinar nueva acción
         current_action = rule.get("current_action", "block")
         new_action = "disabled" if current_action != "disabled" else "block"
-        
+
         success = custom_rules_manager.update_custom_rule_action(rule_id, new_action)
-        
+
         if not success:
             raise HTTPException(status_code=500, detail="Failed to toggle custom rule")
-        
+
         action_text = "disabled" if new_action == "disabled" else "enabled"
         return {
             "message": f"Custom rule {rule_id} {action_text} successfully",
             "rule_id": rule_id,
             "new_action": new_action
         }
-        
+
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -1663,24 +1670,24 @@ async def delete_custom_rule(rule_id: str):
     """Elimina una regla personalizada - VERSIÓN CORREGIDA"""
     try:
         print(f"DELETE request received for custom rule: {rule_id}")
-        
+
         # Verificar que la regla existe antes de intentar eliminarla
         rule = custom_rules_manager.get_custom_rule(rule_id)
         if not rule:
             print(f"Custom rule {rule_id} not found")
             raise HTTPException(status_code=404, detail="Custom rule not found")
-        
+
         print(f"Found custom rule {rule_id}, proceeding with deletion")
-        
+
         # Intentar eliminar la regla
         success = custom_rules_manager.delete_custom_rule(rule_id)
-        
+
         if success:
             print(f"Custom rule {rule_id} deleted successfully")
-            
+
             # Intentar recargar nginx, pero no fallar si no se puede
             try:
-                result = subprocess.run(['sudo', 'systemctl', 'reload', 'nginx'], 
+                result = subprocess.run(['sudo', 'systemctl', 'reload', 'nginx'],
                                       check=True, capture_output=True, text=True, timeout=10)
                 print("Nginx reloaded successfully after rule deletion")
             except subprocess.TimeoutExpired:
@@ -1689,12 +1696,12 @@ async def delete_custom_rule(rule_id: str):
                 print(f"Warning: Nginx reload failed: {e.stderr}, but rule was deleted")
             except Exception as e:
                 print(f"Warning: Could not reload nginx: {e}, but rule was deleted")
-            
+
             return {"message": f"Custom rule {rule_id} deleted successfully"}
         else:
             print(f"Failed to delete custom rule {rule_id}")
             raise HTTPException(status_code=500, detail="Failed to delete custom rule")
-            
+
     except HTTPException:
         # Re-raise HTTP exceptions
         raise
@@ -1703,7 +1710,7 @@ async def delete_custom_rule(rule_id: str):
         import traceback
         traceback.print_exc()
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail=f"Unexpected error deleting custom rule: {str(e)}"
         )
 
@@ -1714,17 +1721,17 @@ async def update_custom_rule_metadata(rule_id: str, request: dict):
         rule = custom_rules_manager.get_custom_rule(rule_id)
         if not rule:
             raise HTTPException(status_code=404, detail="Custom rule not found")
-        
+
         # Por ahora solo soportamos actualizar el estado
         # En el futuro se puede extender para actualizar descripción
-        
+
         success = True  # Placeholder
-        
+
         if success:
             return {"message": "Custom rule updated successfully"}
         else:
             raise HTTPException(status_code=500, detail="Failed to update custom rule")
-            
+
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -1741,7 +1748,7 @@ async def get_custom_rule_status(rule_id: str):
         rule = custom_rules_manager.get_custom_rule(rule_id)
         if not rule:
             raise HTTPException(status_code=404, detail="Custom rule not found")
-        
+
         return {
             "rule_id": rule_id,
             "current_action": rule.get("current_action", "block"),
@@ -1749,7 +1756,7 @@ async def get_custom_rule_status(rule_id: str):
             "last_modified": rule.get("last_modified"),
             "description": rule.get("description")
         }
-        
+
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -1781,37 +1788,37 @@ async def cleanup_custom_rules():
     try:
         if not os.path.exists(CUSTOM_RULES_FILE):
             return {"message": "No custom rules file found"}
-        
+
         # Hacer backup del archivo original
         backup_file = CUSTOM_RULES_FILE + f".backup.{int(datetime.now().timestamp())}"
         shutil.copy2(CUSTOM_RULES_FILE, backup_file)
-        
+
         # Obtener reglas válidas
         valid_rules = custom_rules_manager.get_all_custom_rules()
-        
+
         # Reescribir el archivo con solo las reglas válidas
         with open(CUSTOM_RULES_FILE, 'w') as f:
             f.write(custom_rules_manager._get_custom_rules_header())
-            
+
             for i, rule in enumerate(valid_rules, 1):
                 f.write(f"\n# Custom Rule {i}\n")
                 f.write(f"# Cleaned: {datetime.now().isoformat()}\n")
                 if rule.get('description'):
                     f.write(f"# Description: {rule['description']}\n")
                 f.write(f"{rule['rule_text']}\n\n")
-        
+
         # Recargar nginx
         try:
             subprocess.run(['sudo', 'systemctl', 'reload', 'nginx'], check=True, timeout=10)
         except Exception as e:
             print(f"Warning: Could not reload nginx: {e}")
-        
+
         return {
             "message": f"Cleaned up custom rules file. Found {len(valid_rules)} valid rules.",
             "backup_file": backup_file,
             "rules_found": len(valid_rules)
         }
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error cleaning up rules: {str(e)}")
 
@@ -1821,35 +1828,35 @@ async def save_custom_rule_api(request: dict):
     try:
         rule_text = request.get("rule", "")
         description = request.get("description", "")
-        
+
         if not rule_text:
             raise HTTPException(status_code=400, detail="Rule text is required")
 
         print(f"Saving custom rule: {rule_text}")
-        
+
         # Usar el manager para añadir la regla
         success = custom_rules_manager.add_custom_rule(rule_text, description)
-        
+
         if not success:
             raise HTTPException(status_code=400, detail="Failed to save rule")
 
         # Recargar nginx
         try:
             result = subprocess.run(
-                ["sudo", "systemctl", "reload", "nginx"], 
-                capture_output=True, 
+                ["sudo", "systemctl", "reload", "nginx"],
+                capture_output=True,
                 text=True,
                 timeout=10
             )
-            
+
             if result.returncode != 0:
                 print(f"Nginx reload failed: {result.stderr}")
                 return {
-                    "status": "partial_success", 
+                    "status": "partial_success",
                     "message": "Rule saved but nginx reload failed. Please reload manually.",
                     "nginx_error": result.stderr
                 }
-                
+
         except subprocess.TimeoutExpired:
             return {
                 "status": "partial_success",
@@ -1863,7 +1870,7 @@ async def save_custom_rule_api(request: dict):
             }
 
         return {
-            "status": "success", 
+            "status": "success",
             "message": "Custom rule added and nginx reloaded successfully"
         }
 
@@ -1885,12 +1892,12 @@ async def save_custom_rule_legacy(rule_data: dict):
             raise HTTPException(status_code=400, detail="Rule text is required")
 
         success = custom_rules_manager.add_custom_rule(rule_text)
-        
+
         if not success:
             raise HTTPException(status_code=400, detail="Failed to save rule")
 
         # Recargar nginx
-        result = subprocess.run(["sudo", "systemctl", "reload", "nginx"], 
+        result = subprocess.run(["sudo", "systemctl", "reload", "nginx"],
                                capture_output=True, text=True)
         if result.returncode != 0:
             raise Exception(f"Nginx reload failed: {result.stderr.strip()}")
@@ -1935,24 +1942,24 @@ async def get_exclusion_statistics():
     """Obtiene estadísticas de las exclusiones"""
     try:
         exclusions = exclusion_manager.get_all_exclusions()
-        
+
         stats = {
             "total": len(exclusions),
             "enabled": len([ex for ex in exclusions if ex.enabled]),
             "disabled": len([ex for ex in exclusions if not ex.enabled]),
             "by_type": {},
             "by_condition": {},
-            "recent": len([ex for ex in exclusions if 
+            "recent": len([ex for ex in exclusions if
                          (datetime.now() - ex.created_at).days <= 7])
         }
-        
+
         for exclusion in exclusions:
             ex_type = exclusion.exclusion_type
             stats["by_type"][ex_type] = stats["by_type"].get(ex_type, 0) + 1
-            
+
             condition = exclusion.condition_variable
             stats["by_condition"][condition] = stats["by_condition"].get(condition, 0) + 1
-        
+
         return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting statistics: {str(e)}")
@@ -2025,7 +2032,7 @@ async def get_common_exclusion_templates():
             }
         }
     ]
-    
+
     return {"templates": templates}
 
 # INDIVIDUAL - GENERAL (va DESPUÉS de las rutas específicas)
@@ -2055,7 +2062,7 @@ async def update_exclusion(exclusion_id: str, update_request: ExclusionUpdateReq
         exclusion = exclusion_manager.update_exclusion(exclusion_id, update_request)
         if not exclusion:
             raise HTTPException(status_code=404, detail="Exclusion not found")
-        
+
         log(f"Updated exclusion {exclusion_id}")
         return exclusion
     except HTTPException:
@@ -2070,7 +2077,7 @@ async def delete_exclusion(exclusion_id: str):
     try:
         if not exclusion_manager.delete_exclusion(exclusion_id):
             raise HTTPException(status_code=404, detail="Exclusion not found")
-        
+
         log(f"Deleted exclusion {exclusion_id}")
         return {"message": "Exclusion deleted successfully"}
     except HTTPException:
@@ -2086,13 +2093,13 @@ async def toggle_exclusion(exclusion_id: str):
         exclusion = exclusion_manager.get_exclusion(exclusion_id)
         if not exclusion:
             raise HTTPException(status_code=404, detail="Exclusion not found")
-        
+
         update_request = ExclusionUpdateRequest(enabled=not exclusion.enabled)
         updated_exclusion = exclusion_manager.update_exclusion(exclusion_id, update_request)
-        
+
         action = "enabled" if updated_exclusion.enabled else "disabled"
         log(f"Exclusion {exclusion_id} {action}")
-        
+
         return {
             "message": f"Exclusion {action} successfully",
             "exclusion": updated_exclusion
