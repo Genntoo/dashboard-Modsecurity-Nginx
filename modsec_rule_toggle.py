@@ -409,7 +409,7 @@ def test_crs_configuration():
     """Test if CRS is in Anomaly Scoring mode"""
     try:
         # Look for anomaly scoring indicators in CRS setup
-        crs_setup_path = config['CRS_SETUP_PATH']"/etc/nginx/modsec/coreruleset-4.17.1/crs-setup.conf"
+        crs_setup_path = config['CRS_SETUP_PATH']
         if os.path.exists(crs_setup_path):
             with open(crs_setup_path, 'r') as f:
                 content = f.read()
