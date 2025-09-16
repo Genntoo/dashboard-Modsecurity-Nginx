@@ -938,7 +938,7 @@ def parse_modsecurity_logs(file_path):
     una lista de entradas, cada una con sus secciones extraídas.
     """
     try:
-        with open(file_path, "r") as file:
+        with open(file_path, "r", encoding='utf-8', errors='ignore') as file:
             text = file.read()
     except (IOError, FileNotFoundError) as e:
         print(f"Error reading log file: {e}")
