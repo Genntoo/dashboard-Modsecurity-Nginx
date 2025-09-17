@@ -1842,8 +1842,7 @@ async def save_custom_rule_api(request: dict):
 
         # Recargar nginx
         try:
-            result = subprocess.run(
-                ["sudo", "systemctl", "reload", "nginx"],
+            result = subprocess.run(['nginx', '-s', 'reload'],
                 capture_output=True,
                 text=True,
                 timeout=10
@@ -1897,7 +1896,7 @@ async def save_custom_rule_legacy(rule_data: dict):
             raise HTTPException(status_code=400, detail="Failed to save rule")
 
         # Recargar nginx
-        result = subprocess.run(["sudo", "systemctl", "reload", "nginx"],
+        result = subprocess.run(['nginx', '-s', 'reload'],
                                capture_output=True, text=True)
         if result.returncode != 0:
             raise Exception(f"Nginx reload failed: {result.stderr.strip()}")
