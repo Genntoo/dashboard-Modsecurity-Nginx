@@ -377,7 +377,7 @@ class CustomRulesManager:
 
     def __init__(self):
         self.ensure_custom_rules_file()
-        self.custom_rules_state_file = "/etc/modsecurity.d/owasp-crs/rules/custom_rules_state.json"
+        self.custom_rules_state_file = config['RULE_STATE_FILE']
         self.ensure_state_file()
 
     def ensure_custom_rules_file(self):
