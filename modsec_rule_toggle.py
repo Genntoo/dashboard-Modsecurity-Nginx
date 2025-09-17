@@ -270,7 +270,7 @@ def disable_rule(rule_id):
     regenerate_monitor_rules_file()
 
     try:
-        subprocess.run(['sudo', 'systemctl', 'reload', 'nginx'], check=True)
+        subprocess.run(['nginx', '-s', 'reload'], check=True)
         log("Nginx reloaded successfully")
     except subprocess.CalledProcessError as e:
         log(f"Error reloading nginx: {e}")
@@ -312,7 +312,7 @@ def monitor_rule(rule_id):
     regenerate_disabled_rules_file()
 
     try:
-        subprocess.run(['sudo', 'systemctl', 'reload', 'nginx'], check=True)
+        subprocess.run(['nginx', '-s', 'reload'], check=True)
         log("Nginx reloaded successfully")
     except subprocess.CalledProcessError as e:
         log(f"Error reloading nginx: {e}")
@@ -347,7 +347,7 @@ def enable_rule(rule_id):
     regenerate_monitor_rules_file()
 
     try:
-        subprocess.run(['sudo', 'systemctl', 'reload', 'nginx'], check=True)
+        subprocess.run(['nginx', '-s', 'reload'], check=True)
         log("Nginx reloaded successfully")
     except subprocess.CalledProcessError as e:
         log(f"Error reloading nginx: {e}")

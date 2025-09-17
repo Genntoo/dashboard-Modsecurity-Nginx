@@ -363,7 +363,7 @@ SecRule {condition} \\
 
         # Recargar nginx
         try:
-            result = subprocess.run(['systemctl', 'reload', 'nginx'],
+            result = subprocess.run(['nginx', '-s', 'reload'],
                                   check=True, capture_output=True, text=True)
             print("Nginx reloaded successfully")
         except subprocess.CalledProcessError as e:
@@ -700,7 +700,7 @@ class CustomRulesManager:
                     regenerate_monitor_rules_file()
 
                     # Recargar nginx
-                    subprocess.run(['systemctl', 'reload', 'nginx'], check=True)
+                    subprocess.run(['nginx', '-s', 'reload'], check=True)
                     print(f"Cleaned rule {rule_id} from toggle states and reloaded nginx")
                 else:
                     print(f"Rule {rule_id} not found in toggle states, no cleanup needed")
@@ -1687,7 +1687,7 @@ async def delete_custom_rule(rule_id: str):
 
             # Intentar recargar nginx, pero no fallar si no se puede
             try:
-                result = subprocess.run(['systemctl', 'reload', 'nginx'],
+                result = subprocess.run(['nginx', '-s', 'reload'],
                                       check=True, capture_output=True, text=True, timeout=10)
                 print("Nginx reloaded successfully after rule deletion")
             except subprocess.TimeoutExpired:
@@ -1809,7 +1809,7 @@ async def cleanup_custom_rules():
 
         # Recargar nginx
         try:
-            subprocess.run(['systemctl', 'reload', 'nginx'], check=True, timeout=10)
+            subprocess.run(['nginx', '-s', 'reload'], check=True, timeout=10)
         except Exception as e:
             print(f"Warning: Could not reload nginx: {e}")
 
