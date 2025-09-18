@@ -6,7 +6,7 @@
   "RULE_STATE_FILE": "/opt/owasp-crs/rule_state.json",
   "RULE_DIR": "/opt/owasp-crs/rules",
   "CUSTOM_RULES_FILE": "/opt/owasp-crs/rules/modsecurity_crs_15_customrules.conf",
-  "EXCLUSIONS_DIR": "/opt/owasp-crs/rules",
+  "EXCLUSIONS_DIR": "/opt/owasp-crs/rules/",
   "EXCLUSIONS_FILE": "/opt/owasp-crs/rules/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf",
   "EXCLUSIONS_STATE_FILE": "/opt/owasp-crs/exclusions_state.json",
   "MONITOR_RULES_FILE": "/opt/owasp-crs/rules/RESPONSE-999-CUSTOM-RULES.conf",
@@ -16,3 +16,4 @@
   "port": 5000,
   "debug": false
 }
+
